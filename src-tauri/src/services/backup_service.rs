@@ -88,12 +88,21 @@ impl BackupService {
             validate_backup_package(&zip_path, None)?;
 
             fs::copy(&zip_path, &temporary_destination)
-                .map_err(|e| AppError::Backup(e.to_string()))?;
-            File::open(&temporary_destination)
-                .and_then(|file| file.sync_all())
-                .map_err(|e| AppError::Backup(e.to_string()))?;
-            fs::rename(&temporary_destination, destination)
-                .map_err(|e| AppError::Backup(e.to_string()))?;
+    .map_err(|e| AppError::Backup(e.to_string()))?;
+
+let temp_file = OpenOptions::new()
+    .write(true)
+    .open(&temporary_destination)
+    .map_err(|e| AppError::Backup(e.to_string()))?;
+
+temp_file
+    .sync_all()
+    .map_err(|e| AppError::Backup(e.to_string()))?;
+
+drop(temp_file);
+
+fs::rename(&temporary_destination, destination)
+    .map_err(|e| AppError::Backup(e.to_string()))?;
             Ok(destination.to_string_lossy().to_string())
         })();
 
