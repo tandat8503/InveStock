@@ -1,0 +1,3 @@
+import type { CreateProductInput, PaginatedResult, ProductDTO, ProductListParams, UpdateProductInput } from '@shared/ipc-types'
+import { command } from './client'
+export const products = { list: (params: ProductListParams) => command<PaginatedResult<ProductDTO>>('get_products', { params }), get: (id: number) => command<ProductDTO | null>('get_product_by_id', { id }), create: (input: CreateProductInput) => command<ProductDTO>('create_product', { input }), update: (input: UpdateProductInput) => command<ProductDTO>('update_product', { input }), toggleActive: (id: number) => command<ProductDTO>('toggle_product_active', { id }), delete: (id: number) => command<boolean>('delete_product', { id }) }

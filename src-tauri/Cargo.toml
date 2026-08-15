@@ -1,0 +1,43 @@
+[package]
+name = "feed_inventory_manager"
+version = "1.0.0"
+description = "InveStock Desktop Application"
+authors = ["FeedStore"]
+edition = "2021"
+default-run = "feed_inventory_manager"
+
+[features]
+default = []
+dev-seed = []
+legacy-seed = []
+
+[[bin]]
+name = "seed_legacy"
+path = "src/bin/seed_legacy.rs"
+required-features = ["legacy-seed"]
+
+[lib]
+name = "feed_inventory_manager_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-opener = "2.0.0"
+tauri-plugin-dialog = "2.0.0"
+rusqlite = { version = "0.31", features = ["bundled", "backup"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.24"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+zip = "2.1"
+uuid = { version = "1.10", features = ["v4"] }
+log = "0.4"
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"
