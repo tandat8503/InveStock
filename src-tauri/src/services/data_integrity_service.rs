@@ -300,20 +300,21 @@ mod tests {
         conn.last_insert_rowid()
     }
 
-    fn movement(
-        conn: &Connection,
+    struct MovementSpec<'a> {
         id: i64,
-        kind: &str,
+        kind: &'a str,
         incoming: i64,
         outgoing: i64,
         value_in: i64,
         value_out: i64,
         stock_after: i64,
         value_after: i64,
-    ) {
+    }
+
+    fn movement(conn: &Connection, spec: MovementSpec<'_>) {
         conn.execute(
             "INSERT INTO inventory_transactions(transaction_date,product_id,transaction_type,source_type,source_id,quantity_in,quantity_out,unit_cost,stock_after,value_in,value_out,inventory_value_after) VALUES('2026-08-20',?1,?2,'test',1,?3,?4,100,?5,?6,?7,?8)",
-            rusqlite::params![id, kind, incoming, outgoing, stock_after, value_in, value_out, value_after],
+            rusqlite::params![spec.id, spec.kind, spec.incoming, spec.outgoing, spec.stock_after, spec.value_in, spec.value_out, spec.value_after],
         ).unwrap();
     }
 
@@ -321,18 +322,44 @@ mod tests {
     fn healthy_ledger_reconciles_purchase_sale_and_adjustment() {
         let conn = database();
         let id = product(&conn, "HEALTHY", 135, 13_500, 100);
-        movement(&conn, id, "purchase", 150, 0, 15_000, 0, 150, 15_000);
-        movement(&conn, id, "sale", 0, 20, 0, 2_000, 130, 13_000);
         movement(
             &conn,
-            id,
-            "inventory_adjustment_in",
-            5,
-            0,
-            500,
-            0,
-            135,
-            13_500,
+            MovementSpec {
+                id,
+                kind: "purchase",
+                incoming: 150,
+                outgoing: 0,
+                value_in: 15_000,
+                value_out: 0,
+                stock_after: 150,
+                value_after: 15_000,
+            },
+        );
+        movement(
+            &conn,
+            MovementSpec {
+                id,
+                kind: "sale",
+                incoming: 0,
+                outgoing: 20,
+                value_in: 0,
+                value_out: 2_000,
+                stock_after: 130,
+                value_after: 13_000,
+            },
+        );
+        movement(
+            &conn,
+            MovementSpec {
+                id,
+                kind: "inventory_adjustment_in",
+                incoming: 5,
+                outgoing: 0,
+                value_in: 500,
+                value_out: 0,
+                stock_after: 135,
+                value_after: 13_500,
+            },
         );
         let result = DataIntegrityService::validate(&conn).unwrap();
         assert!(result.can_commit, "{:?}", result.issues);
@@ -344,7 +371,19 @@ mod tests {
         let conn = database();
         product(&conn, "ORPHAN", 10, 1_000, 100);
         let negative = product(&conn, "NEG", -2, -200, 100);
-        movement(&conn, negative, "sale", 0, 2, 0, 200, -2, -200);
+        movement(
+            &conn,
+            MovementSpec {
+                id: negative,
+                kind: "sale",
+                incoming: 0,
+                outgoing: 2,
+                value_in: 0,
+                value_out: 200,
+                stock_after: -2,
+                value_after: -200,
+            },
+        );
         let result = DataIntegrityService::validate(&conn).unwrap();
         assert!(!result.can_commit);
         assert!(result
@@ -373,7 +412,19 @@ mod tests {
             ("HH00042-G88S", -10, -2_173_077, 217_308),
         ] {
             let id = product(&conn, code, quantity, value, rounded_cost);
-            movement(&conn, id, "sale", 0, -quantity, 0, -value, quantity, value);
+            movement(
+                &conn,
+                MovementSpec {
+                    id,
+                    kind: "sale",
+                    incoming: 0,
+                    outgoing: -quantity,
+                    value_in: 0,
+                    value_out: -value,
+                    stock_after: quantity,
+                    value_after: value,
+                },
+            );
         }
 
         let result = DataIntegrityService::validate(&conn).unwrap();
@@ -399,26 +450,30 @@ mod tests {
         let quantity_mismatch = product(&conn, "QTY-MISMATCH", -7, -1_000_000, 142_857);
         movement(
             &conn,
-            quantity_mismatch,
-            "sale",
-            0,
-            6,
-            0,
-            1_000_000,
-            -6,
-            -1_000_000,
+            MovementSpec {
+                id: quantity_mismatch,
+                kind: "sale",
+                incoming: 0,
+                outgoing: 6,
+                value_in: 0,
+                value_out: 1_000_000,
+                stock_after: -6,
+                value_after: -1_000_000,
+            },
         );
         let value_mismatch = product(&conn, "VALUE-MISMATCH", -7, -1_117_947, 159_707);
         movement(
             &conn,
-            value_mismatch,
-            "sale",
-            0,
-            7,
-            0,
-            1_000_000,
-            -7,
-            -1_000_000,
+            MovementSpec {
+                id: value_mismatch,
+                kind: "sale",
+                incoming: 0,
+                outgoing: 7,
+                value_in: 0,
+                value_out: 1_000_000,
+                stock_after: -7,
+                value_after: -1_000_000,
+            },
         );
 
         let result = DataIntegrityService::validate(&conn).unwrap();
@@ -439,7 +494,19 @@ mod tests {
     fn positive_reconciled_inventory_has_no_issue() {
         let conn = database();
         let id = product(&conn, "POSITIVE", 100, 5_000_000, 50_000);
-        movement(&conn, id, "purchase", 100, 0, 5_000_000, 0, 100, 5_000_000);
+        movement(
+            &conn,
+            MovementSpec {
+                id,
+                kind: "purchase",
+                incoming: 100,
+                outgoing: 0,
+                value_in: 5_000_000,
+                value_out: 0,
+                stock_after: 100,
+                value_after: 5_000_000,
+            },
+        );
         let result = DataIntegrityService::validate(&conn).unwrap();
         assert!(result.can_commit);
         assert_eq!(result.critical_count, 0);
