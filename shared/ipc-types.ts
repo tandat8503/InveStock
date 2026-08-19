@@ -352,6 +352,30 @@ export interface InventoryDataHealth {
   isHealthy: boolean
   hasOrphans: boolean
   orphanDetails: string | null
+  criticalCount: number
+  warningCount: number
+  issues: InventoryReconciliationIssue[]
+}
+
+export type IntegritySeverity = 'info' | 'warning' | 'critical'
+
+export interface InventoryReconciliationIssue {
+  code: string
+  severity: IntegritySeverity
+  productId?: number
+  productCode?: string
+  productName?: string
+  storedQuantity?: number
+  calculatedQuantity?: number
+  differenceQuantity?: number
+  storedValue?: number
+  calculatedValue?: number
+  openingQuantity?: number
+  purchasedQuantity?: number
+  soldQuantity?: number
+  adjustmentQuantity?: number
+  unitCost?: number
+  explanation: string
 }
 
 export interface InventoryParams {

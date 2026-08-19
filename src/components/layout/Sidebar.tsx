@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { app } from '@/lib/commands/app'
 import { backup } from '@/lib/commands/backup'
-import type { BackupStatusDTO } from '@shared/ipc-types'
+import { inventory } from '@/lib/commands/inventory'
+import type { BackupStatusDTO, InventoryDataHealth } from '@shared/ipc-types'
 import { backupStatusText } from '@/lib/userFeedback'
 import { useUIStore } from '@/stores/uiStore'
 import { UnsavedChangesDialog } from '@/components/ui'
@@ -37,6 +38,7 @@ export function Sidebar() {
   const navigate = useNavigate()
   const [version, setVersion] = useState('')
   const [backupStatus, setBackupStatus] = useState<BackupStatusDTO | null>(null)
+  const [integrity, setIntegrity] = useState<InventoryDataHealth | null>(null)
   const [pendingNav, setPendingNav] = useState<string | null>(null)
 
   useEffect(() => {
@@ -45,6 +47,7 @@ export function Sidebar() {
 
   const queryBackupStatus = () => {
     void backup.status().then((result) => { if (result.data) setBackupStatus(result.data) })
+    void inventory.checkInventoryDataHealth().then((result) => { if (result.data) setIntegrity(result.data) })
   }
 
   useEffect(() => {
@@ -53,7 +56,8 @@ export function Sidebar() {
 
   useEffect(() => {
     window.addEventListener('backup-updated', queryBackupStatus)
-    return () => window.removeEventListener('backup-updated', queryBackupStatus)
+    window.addEventListener('integrity-updated', queryBackupStatus)
+    return () => { window.removeEventListener('backup-updated', queryBackupStatus); window.removeEventListener('integrity-updated', queryBackupStatus) }
   }, [])
 
   return (
@@ -120,6 +124,10 @@ export function Sidebar() {
             <span className="truncate">{backupStatusText(backupStatus).label}</span>
           </NavLink>
         )}
+        {integrity && <NavLink to="/settings" title={integrity.orphanDetails ?? 'Không phát hiện lỗi toàn vẹn dữ liệu'} className="mb-2 flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200">
+          <span className={`h-2 w-2 rounded-full ${integrity.criticalCount > 0 ? 'bg-red-500' : integrity.warningCount > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+          <span>{integrity.criticalCount > 0 ? 'Cần kiểm tra dữ liệu' : integrity.warningCount > 0 ? 'Có cảnh báo dữ liệu' : 'Dữ liệu an toàn'}</span>
+        </NavLink>}
         <p className="text-xs text-slate-600">{version ? `v${version}` : ''}</p>
       </div>
 

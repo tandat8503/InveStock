@@ -377,6 +377,47 @@ pub struct InventoryDataHealth {
     pub is_healthy: bool,
     pub has_orphans: bool,
     pub orphan_details: Option<String>,
+    pub critical_count: usize,
+    pub warning_count: usize,
+    pub issues: Vec<InventoryReconciliationIssue>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum IntegritySeverity {
+    Info,
+    Warning,
+    Critical,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InventoryReconciliationIssue {
+    pub code: String,
+    pub severity: IntegritySeverity,
+    pub product_id: Option<i64>,
+    pub product_code: Option<String>,
+    pub product_name: Option<String>,
+    pub stored_quantity: Option<i64>,
+    pub calculated_quantity: Option<i64>,
+    pub difference_quantity: Option<i64>,
+    pub stored_value: Option<i64>,
+    pub calculated_value: Option<i64>,
+    pub opening_quantity: Option<i64>,
+    pub purchased_quantity: Option<i64>,
+    pub sold_quantity: Option<i64>,
+    pub adjustment_quantity: Option<i64>,
+    pub unit_cost: Option<i64>,
+    pub explanation: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreValidationResult {
+    pub can_commit: bool,
+    pub critical_count: usize,
+    pub warning_count: usize,
+    pub issues: Vec<InventoryReconciliationIssue>,
 }
 
 #[derive(Debug, Clone, Serialize)]

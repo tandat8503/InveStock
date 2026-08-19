@@ -1,4 +1,5 @@
 pub mod backup_service;
+pub mod data_integrity_service;
 pub mod inventory_service;
 pub mod legacy_migration_service;
 pub mod payment_service;

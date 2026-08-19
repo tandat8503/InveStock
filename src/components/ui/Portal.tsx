@@ -8,5 +8,6 @@ import { createPortal } from 'react-dom'
  * are never clipped by a parent's overflow-hidden or transform context.
  */
 export function Portal({ children }: { children: ReactNode }) {
+  if (typeof document === 'undefined') return children
   return createPortal(children, document.body)
 }

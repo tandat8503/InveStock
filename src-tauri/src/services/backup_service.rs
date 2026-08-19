@@ -12,6 +12,8 @@ use crate::domain::errors::{AppError, AppResult};
 use crate::domain::models::{AppSettingsDTO, BackupListItemDTO, BackupStatusDTO};
 use crate::infrastructure::database::connection::init_db_pool;
 use crate::infrastructure::database::connection::DbPool;
+use crate::infrastructure::database::migrations::run_migrations;
+use crate::services::data_integrity_service::DataIntegrityService;
 use crate::state::AppState;
 
 const DATABASE_ENTRY: &str = "database/feed-inventory.db";
@@ -172,11 +174,53 @@ impl BackupService {
             }
             validate_database(&staged).map_err(|e| AppError::Restore(e.to_string()))?;
 
-            let recovery = parent
-                .join("recovery-backups")
-                .join(format!("pre_restore_{}.zip", Uuid::new_v4()));
+            let recovery = parent.join("recovery-backups").join(format!(
+                "investock_pre_restore_{}.zip",
+                chrono::Local::now().format("%Y%m%d_%H%M%S")
+            ));
             BackupService::new(pool.clone(), state.db_path.clone())
                 .create_backup_typed(&recovery, "pre_restore")?;
+
+            log::info!("restore_start source={}", source.display());
+            log::info!("backup_validated schema={}", metadata.schema_version);
+            log::info!("safety_backup_created path={}", recovery.display());
+            {
+                let staged_connection = rusqlite::Connection::open(&staged)
+                    .map_err(|e| AppError::Restore(e.to_string()))?;
+                staged_connection
+                    .execute_batch("PRAGMA foreign_keys=ON;")
+                    .map_err(|e| AppError::Restore(e.to_string()))?;
+                if let Err(error) = run_migrations(&staged_connection) {
+                    return Err(AppError::Restore(format!(
+                        "Migration trên database tạm thất bại: {error}"
+                    )));
+                }
+                log::info!("migration_completed");
+                let validation = DataIntegrityService::validate(&staged_connection)
+                    .map_err(|e| AppError::Restore(e.to_string()))?;
+                log::info!(
+                    "reconciliation_completed critical_count={} warning_count={}",
+                    validation.critical_count,
+                    validation.warning_count
+                );
+                if !validation.can_commit {
+                    let summary = validation
+                        .issues
+                        .iter()
+                        .filter(|issue| {
+                            issue.severity == crate::domain::models::IntegritySeverity::Critical
+                        })
+                        .take(10)
+                        .map(|issue| format!("{}: {}", issue.code, issue.explanation))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    return Err(AppError::Restore(format!(
+                        "Không thể hoàn tất khôi phục: phát hiện {} lỗi nghiêm trọng. Dữ liệu hiện tại chưa bị thay đổi.\n{}",
+                        validation.critical_count, summary
+                    )));
+                }
+            }
+            validate_database(&staged).map_err(|e| AppError::Restore(e.to_string()))?;
             pool.get()
                 .map_err(|e| AppError::Restore(e.to_string()))?
                 .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
@@ -202,6 +246,7 @@ impl BackupService {
                     Ok(_) => {
                         state.replace_pool(new_pool)?;
                         fs::remove_file(&rollback).map_err(|e| AppError::Restore(e.to_string()))?;
+                        log::info!("commit_success");
                         return Ok(true);
                     }
                     Err(error) => {
@@ -214,6 +259,7 @@ impl BackupService {
             {
                 fs::remove_file(&state.db_path).map_err(|e| AppError::Restore(e.to_string()))?;
                 restore_rollback(state, &rollback)?;
+                log::error!("rollback reason={}", reopen_error);
                 Err(AppError::Restore(reopen_error))
             }
         })();

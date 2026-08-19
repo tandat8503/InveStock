@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Settings, Save, DatabaseBackup, RotateCcw } from 'lucide-react'
+import { Settings, Save, DatabaseBackup, RotateCcw, ShieldCheck } from 'lucide-react'
 import type { AppSettingsDTO, BackupStatusDTO, SupplierDTO } from '@shared/ipc-types'
 import { settings as settingsCommands } from '@/lib/commands/settings'
 import { backup as backupCommands } from '@/lib/commands/backup'
@@ -35,6 +35,7 @@ export function SettingsPage() {
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false)
   const [restorePathFile, setRestorePathFile] = useState<string | null>(null)
   const [health, setHealth] = useState<InventoryDataHealth | null>(null)
+  const [healthBusy, setHealthBusy] = useState(false)
 
   useEffect(() => {
     void loadSettings()
@@ -89,6 +90,22 @@ export function SettingsPage() {
       setBackupStatus(result.data)
       window.dispatchEvent(new Event('backup-updated'))
     }
+  }
+
+  async function runDataCheck() {
+    setHealthBusy(true)
+    setBackupMessage('Đang kiểm tra sản phẩm, giao dịch và đối soát tồn kho...')
+    const result = await inventoryCommands.checkInventoryDataHealth()
+    if (result.success && result.data) {
+      setHealth(result.data)
+      setBackupMessage(result.data.criticalCount > 0
+        ? `Phát hiện ${result.data.criticalCount} lỗi nghiêm trọng và ${result.data.warningCount} cảnh báo.`
+        : result.data.warningCount > 0
+          ? `Không có lỗi nghiêm trọng; có ${result.data.warningCount} cảnh báo.`
+          : 'Không phát hiện lỗi toàn vẹn dữ liệu.')
+      window.dispatchEvent(new Event('integrity-updated'))
+    } else setBackupMessage(commandError(result, 'Không thể kiểm tra dữ liệu.'))
+    setHealthBusy(false)
   }
 
   async function createBackup() {
@@ -272,6 +289,7 @@ export function SettingsPage() {
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-primary inline-flex items-center gap-2 disabled:opacity-50" onClick={() => void createBackup()} disabled={!settings.backupFolder || backupBusy}><DatabaseBackup size={16}/>{backupBusy ? 'Đang xử lý...' : 'Sao lưu ngay'}</button>
             <button type="button" disabled={backupBusy} className="px-3 py-2 border rounded-md text-sm inline-flex items-center gap-2 disabled:opacity-50" onClick={() => void restoreBackup()}><RotateCcw size={16}/>Khôi phục dữ liệu</button>
+            <button type="button" disabled={backupBusy || healthBusy} className="px-3 py-2 border rounded-md text-sm inline-flex items-center gap-2 disabled:opacity-50" onClick={() => void runDataCheck()}><ShieldCheck size={16}/>{healthBusy ? 'Đang kiểm tra...' : 'Kiểm tra dữ liệu'}</button>
           </div>
           {backupMessage && <p className="text-sm text-blue-700">{backupMessage}</p>}
           {backupStatus && (
@@ -283,12 +301,20 @@ export function SettingsPage() {
             </div>
           )}
           {health && (
-            <div className={`rounded-md p-3 text-sm border ${health.isHealthy ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-800 border-red-200'} space-y-1`}>
+            <div className={`rounded-md p-3 text-sm border ${health.criticalCount > 0 ? 'bg-red-50 text-red-800 border-red-200' : health.warningCount > 0 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-green-50 text-green-700 border-green-200'} space-y-1`}>
               <p className="font-bold">
-                {health.isHealthy ? 'Chẩn đoán dữ liệu tồn kho: An toàn' : 'Cảnh báo: Phát hiện lỗi lệch dữ liệu tồn kho (ORPHAN_CURRENT_STOCK)'}
+                {health.criticalCount > 0 ? 'Phát hiện lỗi dữ liệu' : health.warningCount > 0 ? 'Cần kiểm tra dữ liệu' : 'Dữ liệu an toàn'}
               </p>
+              <p>Critical: {health.criticalCount} · Warnings: {health.warningCount}</p>
               {health.orphanDetails ? (
-                <p className="text-xs font-mono whitespace-pre-wrap mt-1 text-red-600 bg-red-100/50 p-2 rounded border border-red-150">{health.orphanDetails}</p>
+                <div className="mt-2 max-h-72 space-y-2 overflow-auto">
+                  {health.issues.map((issue, index) => <div key={`${issue.code}-${issue.productId ?? index}`} className="rounded border border-current/20 bg-white/50 p-2 text-xs">
+                    <p className="font-semibold">{issue.code} · {issue.productCode ?? 'Database'} {issue.productName ?? ''}</p>
+                    <p>{issue.explanation}</p>
+                    {issue.productId && <p className="font-mono">Stored: {issue.storedQuantity ?? '—'} / {issue.storedValue ?? '—'}đ · Calculated: {issue.calculatedQuantity ?? '—'} / {issue.calculatedValue ?? '—'}đ</p>}
+                    {issue.productId && <p className="font-mono">Opening {issue.openingQuantity ?? 0} + Purchase {issue.purchasedQuantity ?? 0} - Sale {issue.soldQuantity ?? 0} ± Adjustment {issue.adjustmentQuantity ?? 0}</p>}
+                  </div>)}
+                </div>
               ) : (
                 <p className="text-xs text-green-600">Mọi sản phẩm có tồn kho đều khớp với lịch sử nhập/xuất hoặc số dư khởi tạo.</p>
               )}

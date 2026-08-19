@@ -8,7 +8,7 @@ use crate::domain::models::{
 };
 use crate::infrastructure::database::connection::DbPool;
 use crate::services::settings_service::SettingsService;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::params;
 
 #[derive(Clone)]
 struct LegacyPeriodMetadata {
@@ -891,128 +891,7 @@ impl InventoryService {
             .pool
             .get()
             .map_err(|error| AppError::Database(error.to_string()))?;
-        let mut stmt = conn.prepare(
-            "SELECT id, product_code, product_name, current_stock, current_inventory_value FROM products",
-        )?;
-
-        let mut issues = Vec::new();
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, i64>(3)?,
-                row.get::<_, i64>(4)?,
-            ))
-        })?;
-
-        for r in rows {
-            let (id, code, name, stock, val) = r?;
-
-            let latest_tx: Option<(i64, i64)> = conn
-                .query_row(
-                    "SELECT stock_after, inventory_value_after \
-                     FROM inventory_transactions \
-                     WHERE product_id = ?1 \
-                     ORDER BY transaction_date DESC, id DESC LIMIT 1",
-                    [id],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
-                )
-                .optional()?;
-
-            let tx_count: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM inventory_transactions WHERE product_id = ?1",
-                [id],
-                |row| row.get(0),
-            )?;
-
-            let legacy_exists: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM legacy_inventory_summaries WHERE product_id = ?1",
-                [id],
-                |row| row.get(0),
-            )?;
-
-            if let Some((last_stock, last_val)) = latest_tx {
-                if last_stock != stock {
-                    issues.push(format!(
-                        "STOCK_MISMATCH: '{}' ({}) current_stock={} != transaction stock_after={}",
-                        name, code, stock, last_stock
-                    ));
-                }
-                if last_val != val {
-                    issues.push(format!(
-                        "VALUE_MISMATCH: '{}' ({}) current_inventory_value={}đ != transaction inventory_value_after={}đ",
-                        name, code, val, last_val
-                    ));
-                }
-            } else if tx_count == 0 && legacy_exists == 0 && (stock != 0 || val != 0) {
-                issues.push(format!(
-                    "ORPHAN_CURRENT_STOCK: '{}' ({}) có tồn: {} bao, giá trị: {}đ",
-                    name, code, stock, val
-                ));
-            }
-
-            if stock > 0 && val == 0 {
-                issues.push(format!(
-                    "ZERO_VALUE_WITH_NONZERO_STOCK: '{}' ({}) tồn={} nhưng giá trị tồn=0đ",
-                    name, code, stock
-                ));
-                if legacy_exists == 0
-                    && latest_tx
-                        .map(|(_, latest_value)| latest_value == 0)
-                        .unwrap_or(true)
-                {
-                    issues.push(format!(
-                        "MISSING_VALUE_SOURCE: '{}' ({}) chưa có nguồn giá trị tồn đáng tin cậy",
-                        name, code
-                    ));
-                }
-            }
-
-            if val < 0 {
-                issues.push(format!(
-                    "NEGATIVE_INVENTORY_VALUE: '{}' ({}) giá trị tồn âm ({}đ)",
-                    name, code, val
-                ));
-            }
-
-            if stock == 0 && val != 0 {
-                issues.push(format!(
-                    "VALUE_MISMATCH: '{}' ({}) tồn bằng 0 nhưng giá trị tồn={}đ",
-                    name, code, val
-                ));
-            }
-
-            if stock != 0 && val != 0 {
-                let expected_cost = ((i128::from(val).abs() + i128::from(stock).abs() / 2)
-                    / i128::from(stock).abs()) as i64;
-                let average_cost: i64 = conn.query_row(
-                    "SELECT average_cost FROM products WHERE id=?1",
-                    [id],
-                    |row| row.get(0),
-                )?;
-                if average_cost != expected_cost {
-                    issues.push(format!(
-                        "VALUE_MISMATCH: '{}' ({}) average_cost={}đ, expected={}đ",
-                        name, code, average_cost, expected_cost
-                    ));
-                }
-            }
-        }
-
-        if !issues.is_empty() {
-            Ok(InventoryDataHealth {
-                is_healthy: false,
-                has_orphans: true,
-                orphan_details: Some(issues.join("\n")),
-            })
-        } else {
-            Ok(InventoryDataHealth {
-                is_healthy: true,
-                has_orphans: false,
-                orphan_details: None,
-            })
-        }
+        crate::services::data_integrity_service::DataIntegrityService::health(&conn)
     }
 
     pub fn get_inventory_summary(
