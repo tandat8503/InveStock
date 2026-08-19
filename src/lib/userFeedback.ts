@@ -20,5 +20,5 @@ export function backupStatusText(status: BackupStatusDTO): { label: string; warn
       warning: 'Không thể sao lưu vào thư mục bạn đã chọn. InveStock vẫn đang giữ một bản sao an toàn trên máy.',
     }
   }
-  return { label: status.healthy ? 'Dữ liệu an toàn' : 'Sao lưu cần chú ý' }
+  return { label: status.healthy ? 'Sao lưu an toàn' : 'Sao lưu cần chú ý' }
 }

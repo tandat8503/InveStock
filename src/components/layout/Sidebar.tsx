@@ -126,7 +126,7 @@ export function Sidebar() {
         )}
         {integrity && <NavLink to="/settings" title={integrity.orphanDetails ?? 'Không phát hiện lỗi toàn vẹn dữ liệu'} className="mb-2 flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200">
           <span className={`h-2 w-2 rounded-full ${integrity.criticalCount > 0 ? 'bg-red-500' : integrity.warningCount > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-          <span>{integrity.criticalCount > 0 ? 'Cần kiểm tra dữ liệu' : integrity.warningCount > 0 ? 'Có cảnh báo dữ liệu' : 'Dữ liệu an toàn'}</span>
+          <span>{integrity.criticalCount > 0 ? 'Cần kiểm tra dữ liệu' : integrity.warningCount > 0 ? 'Có cảnh báo dữ liệu tồn kho' : 'Dữ liệu tồn kho an toàn'}</span>
         </NavLink>}
         <p className="text-xs text-slate-600">{version ? `v${version}` : ''}</p>
       </div>

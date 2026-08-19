@@ -166,31 +166,46 @@ impl DataIntegrityService {
                 issue.code = "ORPHAN_CURRENT_STOCK".into();
                 issue.explanation = "Sản phẩm có snapshot tồn kho nhưng không có baseline legacy hoặc giao dịch sổ kho giải thích số dư.".into();
                 issues.push(issue);
-            } else if stored_quantity != calculated_quantity || stored_value != calculated_value {
-                let mut issue = base();
-                issue.code = "INVENTORY_STOCK_MISMATCH".into();
-                issue.explanation = format!("Tồn lưu ({stored_quantity}, {stored_value}đ) khác sổ kho ({calculated_quantity}, {calculated_value}đ). Không tự động sửa dữ liệu.");
-                issues.push(issue);
+            } else {
+                if stored_quantity != calculated_quantity {
+                    let mut issue = base();
+                    issue.code = "INVENTORY_STOCK_MISMATCH".into();
+                    issue.explanation = format!("Số lượng tồn lưu {stored_quantity} khác số lượng tính từ sổ kho {calculated_quantity}. Không tự động sửa dữ liệu.");
+                    issues.push(issue);
+                }
+                if stored_value != calculated_value {
+                    let mut issue = base();
+                    issue.code = "INVENTORY_VALUE_MISMATCH".into();
+                    issue.explanation = format!("Giá trị tồn lưu {stored_value}đ khác giá trị tính từ sổ kho {calculated_value}đ. Không tự động sửa dữ liệu.");
+                    issues.push(issue);
+                }
             }
             if stored_quantity < 0 {
                 let mut issue = base();
                 issue.code = "NEGATIVE_STOCK".into();
                 issue.severity = IntegritySeverity::Warning;
-                issue.explanation = "Số lượng tồn âm là trạng thái nghiệp vụ/legacy; dữ liệu được giữ nguyên và cần kiểm tra.".into();
+                issue.explanation = if stored_quantity == calculated_quantity {
+                    format!("Số lượng tồn đang âm nhưng dữ liệu lưu và dữ liệu tính toán khớp nhau ({stored_quantity}). Đây là trạng thái tồn âm từ dữ liệu legacy/import và cần được theo dõi.")
+                } else {
+                    format!("Số lượng tồn đang âm và không khớp sổ kho: lưu {stored_quantity}, tính toán {calculated_quantity}.")
+                };
                 issues.push(issue);
             }
             if stored_value < 0 {
                 let mut issue = base();
                 issue.code = "NEGATIVE_INVENTORY_VALUE".into();
-                issue.severity = if stored_quantity < 0
-                    && average_cost >= 0
-                    && stored_value == stored_quantity.saturating_mul(average_cost)
-                {
+                let internally_consistent =
+                    stored_quantity == calculated_quantity && stored_value == calculated_value;
+                issue.severity = if stored_quantity < 0 && internally_consistent {
                     IntegritySeverity::Warning
                 } else {
                     IntegritySeverity::Critical
                 };
-                issue.explanation = format!("Giá trị tồn {stored_value}đ; số lượng {stored_quantity}; đơn giá bình quân {average_cost}đ. Phân loại dựa trên dấu và quan hệ quantity × cost, không tự động đưa về 0.");
+                issue.explanation = if internally_consistent && stored_quantity < 0 {
+                    format!("Giá trị tồn kho đang âm do số lượng tồn âm. Giá trị lưu và giá trị tính toán khớp nhau ({stored_value}đ). Đơn giá bình quân {average_cost}đ chỉ dùng để chẩn đoán, không dùng để quyết định tính toàn vẹn.")
+                } else {
+                    format!("Giá trị tồn âm không nhất quán: lưu {stored_value}đ, tính toán {calculated_value}đ, số lượng {stored_quantity}, đơn giá bình quân {average_cost}đ.")
+                };
                 issues.push(issue);
             }
         }
@@ -347,5 +362,88 @@ mod tests {
             .iter()
             .any(|issue| issue.code == "NEGATIVE_INVENTORY_VALUE"
                 && issue.severity == IntegritySeverity::Warning));
+    }
+
+    #[test]
+    fn verified_legacy_negative_rows_are_warning_only_despite_cost_rounding() {
+        let conn = database();
+        for (code, quantity, value, rounded_cost) in [
+            ("HH00003-G07C", -7, -1_117_947, 159_707),
+            ("HH00010-9088B", -6, -1_015_215, 169_202),
+            ("HH00042-G88S", -10, -2_173_077, 217_308),
+        ] {
+            let id = product(&conn, code, quantity, value, rounded_cost);
+            movement(&conn, id, "sale", 0, -quantity, 0, -value, quantity, value);
+        }
+
+        let result = DataIntegrityService::validate(&conn).unwrap();
+        assert!(result.can_commit, "{:?}", result.issues);
+        assert_eq!(result.critical_count, 0);
+        assert_eq!(result.warning_count, 6);
+        for code in ["HH00003-G07C", "HH00010-9088B", "HH00042-G88S"] {
+            let product_issues = result
+                .issues
+                .iter()
+                .filter(|issue| issue.product_code.as_deref() == Some(code))
+                .collect::<Vec<_>>();
+            assert_eq!(product_issues.len(), 2);
+            assert!(product_issues
+                .iter()
+                .all(|issue| issue.severity == IntegritySeverity::Warning));
+        }
+    }
+
+    #[test]
+    fn real_quantity_and_value_mismatches_remain_critical() {
+        let conn = database();
+        let quantity_mismatch = product(&conn, "QTY-MISMATCH", -7, -1_000_000, 142_857);
+        movement(
+            &conn,
+            quantity_mismatch,
+            "sale",
+            0,
+            6,
+            0,
+            1_000_000,
+            -6,
+            -1_000_000,
+        );
+        let value_mismatch = product(&conn, "VALUE-MISMATCH", -7, -1_117_947, 159_707);
+        movement(
+            &conn,
+            value_mismatch,
+            "sale",
+            0,
+            7,
+            0,
+            1_000_000,
+            -7,
+            -1_000_000,
+        );
+
+        let result = DataIntegrityService::validate(&conn).unwrap();
+        assert!(!result.can_commit);
+        assert!(result.issues.iter().any(|issue| {
+            issue.code == "INVENTORY_STOCK_MISMATCH"
+                && issue.product_code.as_deref() == Some("QTY-MISMATCH")
+                && issue.severity == IntegritySeverity::Critical
+        }));
+        assert!(result.issues.iter().any(|issue| {
+            issue.code == "INVENTORY_VALUE_MISMATCH"
+                && issue.product_code.as_deref() == Some("VALUE-MISMATCH")
+                && issue.severity == IntegritySeverity::Critical
+        }));
+    }
+
+    #[test]
+    fn positive_reconciled_inventory_has_no_issue() {
+        let conn = database();
+        let id = product(&conn, "POSITIVE", 100, 5_000_000, 50_000);
+        movement(&conn, id, "purchase", 100, 0, 5_000_000, 0, 100, 5_000_000);
+        let result = DataIntegrityService::validate(&conn).unwrap();
+        assert!(result.can_commit);
+        assert_eq!(result.critical_count, 0);
+        assert_eq!(result.warning_count, 0);
+        assert!(result.issues.is_empty());
     }
 }

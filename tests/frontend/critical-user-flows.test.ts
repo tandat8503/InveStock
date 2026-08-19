@@ -21,7 +21,7 @@ describe('critical low-tech user feedback', () => {
   })
 
   it('labels a healthy backup as safe', () => {
-    expect(backupStatusText(healthy)).toEqual({ label: 'Dữ liệu an toàn' })
+    expect(backupStatusText(healthy)).toEqual({ label: 'Sao lưu an toàn' })
   })
 
   it('shows a protected warning when backup uses fallback storage', () => {

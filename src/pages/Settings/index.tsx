@@ -303,9 +303,10 @@ export function SettingsPage() {
           {health && (
             <div className={`rounded-md p-3 text-sm border ${health.criticalCount > 0 ? 'bg-red-50 text-red-800 border-red-200' : health.warningCount > 0 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-green-50 text-green-700 border-green-200'} space-y-1`}>
               <p className="font-bold">
-                {health.criticalCount > 0 ? 'Phát hiện lỗi dữ liệu' : health.warningCount > 0 ? 'Cần kiểm tra dữ liệu' : 'Dữ liệu an toàn'}
+                {health.criticalCount > 0 ? 'Phát hiện lỗi dữ liệu' : health.warningCount > 0 ? 'Có cảnh báo dữ liệu tồn kho' : 'Dữ liệu tồn kho an toàn'}
               </p>
               <p>Critical: {health.criticalCount} · Warnings: {health.warningCount}</p>
+              {health.criticalCount === 0 && health.warningCount > 0 && <p>Dữ liệu nhất quán nhưng có một số sản phẩm tồn âm từ dữ liệu legacy.</p>}
               {health.orphanDetails ? (
                 <div className="mt-2 max-h-72 space-y-2 overflow-auto">
                   {health.issues.map((issue, index) => <div key={`${issue.code}-${issue.productId ?? index}`} className="rounded border border-current/20 bg-white/50 p-2 text-xs">
