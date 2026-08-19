@@ -26,9 +26,9 @@ const presetLabels: Record<DatePreset, string> = {
 }
 
 const groupByLabels: Record<GroupByPeriod, string> = {
-  day: 'Theo ngày',
-  week: 'Theo tuần',
-  month: 'Theo tháng',
+  day: 'Ngày',
+  week: 'Tuần',
+  month: 'Tháng',
 }
 
 export function DashboardHeader({
@@ -70,37 +70,39 @@ export function DashboardHeader({
   }
 
   return (
-    <div className="flex flex-col gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+    <div className="card p-4 flex flex-col gap-4 flex-shrink-0">
       <div className="flex flex-wrap items-center justify-between gap-4">
+        {/* Title */}
         <div>
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Phân tích kinh doanh</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Biểu đồ xu hướng và hiệu suất kho hàng</p>
+          <h1 className="page-title text-xl">Phân tích kinh doanh</h1>
+          <p className="page-subtitle">Biểu đồ xu hướng và hiệu suất kho hàng</p>
         </div>
 
+        {/* Controls */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Preset Selector */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowPresetDropdown((open) => !open)}
-              className="flex h-9 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <Calendar size={14} className="text-primary-600" />
+              <Calendar size={14} className="text-primary-600 flex-shrink-0" />
               <span>{presetLabels[params.preset ?? 'this_month']}</span>
-              <ChevronDown size={13} className="text-gray-400" />
+              <ChevronDown size={13} className="text-slate-400 flex-shrink-0" />
             </button>
 
             {showPresetDropdown && (
-              <div className="absolute right-0 z-20 mt-1.5 w-52 space-y-0.5 rounded-xl border border-gray-200 bg-white p-1.5 text-xs shadow-xl">
+              <div className="absolute right-0 z-20 mt-1.5 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
                 {(Object.keys(presetLabels) as DatePreset[]).map((preset) => (
                   <button
                     key={preset}
                     type="button"
                     onClick={() => handleSelectPreset(preset)}
-                    className={`w-full rounded-lg px-3 py-2 text-left font-medium transition-colors ${
+                    className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
                       params.preset === preset
                         ? 'bg-primary-50 font-semibold text-primary-700'
-                        : 'text-gray-700 hover:bg-gray-50'
+                        : 'text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     {presetLabels[preset]}
@@ -111,8 +113,8 @@ export function DashboardHeader({
           </div>
 
           {/* Group By Selector */}
-          <div className="flex items-center rounded-lg border border-gray-300 bg-gray-50/50 p-0.5 text-xs font-medium">
-            <Layers size={13} className="ml-2 mr-1 text-gray-400" />
+          <div className="flex items-center rounded-lg border border-slate-300 bg-slate-50 p-0.5 text-xs font-medium">
+            <Layers size={13} className="ml-2 mr-1 text-slate-400 flex-shrink-0" />
             {(['day', 'week', 'month'] as GroupByPeriod[]).map((period) => (
               <button
                 key={period}
@@ -120,8 +122,8 @@ export function DashboardHeader({
                 onClick={() => onChange({ ...params, groupBy: period })}
                 className={`rounded-md px-2.5 py-1 transition-all ${
                   (params.groupBy ?? 'month') === period
-                    ? 'bg-white text-gray-900 font-semibold shadow-xs'
-                    : 'text-gray-500 hover:text-gray-900'
+                    ? 'bg-white text-slate-900 font-semibold shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
                 {groupByLabels[period]}
@@ -130,28 +132,32 @@ export function DashboardHeader({
           </div>
 
           {/* Compare Toggle */}
-          <label className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 h-9 text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-50">
+          <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50">
             <input
               type="checkbox"
               checked={params.comparePrevious ?? true}
               onChange={(e) => onChange({ ...params, comparePrevious: e.target.checked })}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
             />
             So với kỳ trước
           </label>
 
-          {/* Refresh Button */}
+          {/* Refresh — secondary/ghost */}
           <Button variant="secondary" size="sm" onClick={onRefresh} disabled={loading} className="h-9">
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             Làm mới
           </Button>
-          <Button size="sm" onClick={handleApply} disabled={loading} className="h-9">Áp dụng</Button>
+
+          {/* Apply — primary, most prominent */}
+          <Button size="sm" onClick={handleApply} disabled={loading} className="h-9">
+            Áp dụng
+          </Button>
         </div>
       </div>
 
-      {/* Custom Date Range Picker Inputs (Only visible when 'custom' is selected) */}
+      {/* Custom Date Range Picker (only when preset = 'custom') */}
       {isCustom && (
-        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100">
+        <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-100">
           <div className="w-40">
             <DatePicker
               label="Từ ngày"
@@ -172,7 +178,7 @@ export function DashboardHeader({
               }}
             />
           </div>
-          {dateError && <p className="self-end pb-2 text-xs text-danger-600">{dateError}</p>}
+          {dateError && <p className="self-end pb-2 text-xs text-red-600">{dateError}</p>}
         </div>
       )}
     </div>

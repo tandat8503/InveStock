@@ -21,7 +21,7 @@ export function InventoryTable({
   const numericHeaders = new Set(['Tồn hiện tại', 'Tồn đầu', 'Nhập', 'Xuất', 'Điều chỉnh', 'Tồn cuối', 'Giá vốn BQ', 'Giá trị tồn'])
 
   return (
-    <div className="h-full overflow-auto rounded-lg border border-gray-200">
+    <div className="h-full overflow-auto rounded-xl border border-slate-200">
       <table className="min-w-[1100px] w-full table-fixed text-sm">
         <colgroup>
           <col className="w-[100px]" />
@@ -41,12 +41,12 @@ export function InventoryTable({
           <col className="w-[130px]" />
           <col className="w-[145px]" />
         </colgroup>
-        <thead className="sticky top-0 z-10 bg-gray-50">
+        <thead className="sticky top-0 z-10 bg-slate-50">
           <tr>
             {headers.map((header) => (
               <th
                 key={header}
-                className={`whitespace-nowrap px-3 py-2.5 font-semibold text-gray-600 ${
+                className={`whitespace-nowrap px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide ${
                   numericHeaders.has(header) ? 'text-right' : 'text-left'
                 }`}
               >
@@ -68,11 +68,11 @@ export function InventoryTable({
             return (
               <tr
                 key={row.productId}
-                className={`cursor-pointer border-t hover:bg-gray-50 ${isOut ? 'bg-rose-50/40' : isLow ? 'bg-amber-50/40' : ''}`}
+                className={`cursor-pointer border-t border-slate-100 hover:bg-slate-50 ${isOut ? 'bg-rose-50/40' : isLow ? 'bg-amber-50/40' : ''}`}
                 onClick={() => onOpen(row.productId)}
               >
                 <td className="whitespace-nowrap px-3 py-2.5 font-medium">{row.productCode}</td>
-                <td className="truncate px-3 py-2.5 font-medium text-gray-900" title={row.productName}>
+                <td className="truncate px-3 py-2.5 font-medium text-slate-900" title={row.productName}>
                   {row.productName}
                 </td>
                 {isCurrent && <td className="truncate px-3 py-2.5">{row.animalCategory}</td>}

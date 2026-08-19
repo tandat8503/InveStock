@@ -52,10 +52,10 @@ export function StockAlertCard({
   return (
     <div className="card flex flex-col justify-between">
       <div>
-        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <div className="flex items-center gap-2">
             <ShieldAlert size={16} className="text-amber-500" />
-            <h2 className="text-sm font-bold text-gray-900">Cảnh báo tồn kho</h2>
+            <h2 className="text-sm font-bold text-slate-900">Cảnh báo tồn kho</h2>
           </div>
           <Link
             to="/inventory"
@@ -67,14 +67,14 @@ export function StockAlertCard({
         </div>
 
         {/* Tab Selection */}
-        <div className="flex gap-1.5 px-4 pt-3 text-[11px] font-medium border-b border-gray-100 pb-2 overflow-x-auto">
+        <div className="flex gap-1.5 px-4 pt-3 text-[11px] font-medium border-b border-slate-100 pb-2 overflow-x-auto">
           <button
             type="button"
             onClick={() => setTab('all')}
             className={`rounded-md px-2 py-1 transition-colors whitespace-nowrap ${
               tab === 'all'
-                ? 'bg-gray-900 text-white font-semibold'
-                : 'text-gray-500 hover:bg-gray-100'
+                ? 'bg-slate-900 text-white font-semibold'
+                : 'text-slate-500 hover:bg-slate-100'
             }`}
           >
             Tất cả ({totalCount})
@@ -85,7 +85,7 @@ export function StockAlertCard({
             className={`rounded-md px-2 py-1 transition-colors whitespace-nowrap ${
               tab === 'negative'
                 ? 'bg-purple-600 text-white font-semibold'
-                : 'text-gray-500 hover:bg-purple-50 hover:text-purple-600'
+                : 'text-slate-500 hover:bg-purple-50 hover:text-purple-600'
             }`}
           >
             Tồn âm ({negativeStockCount})
@@ -96,7 +96,7 @@ export function StockAlertCard({
             className={`rounded-md px-2 py-1 transition-colors whitespace-nowrap ${
               tab === 'out'
                 ? 'bg-red-500 text-white font-semibold'
-                : 'text-gray-500 hover:bg-red-50 hover:text-red-600'
+                : 'text-slate-500 hover:bg-red-50 hover:text-red-600'
             }`}
           >
             Hết hàng ({outOfStockCount})
@@ -107,7 +107,7 @@ export function StockAlertCard({
             className={`rounded-md px-2 py-1 transition-colors whitespace-nowrap ${
               tab === 'low'
                 ? 'bg-amber-500 text-white font-semibold'
-                : 'text-gray-500 hover:bg-amber-50 hover:text-amber-600'
+                : 'text-slate-500 hover:bg-amber-50 hover:text-amber-600'
             }`}
           >
             Sắp hết ({lowStockCount})
@@ -116,12 +116,12 @@ export function StockAlertCard({
 
         <div className="max-h-60 overflow-auto">
           {filtered.length === 0 ? (
-            <div className="p-6 text-center text-xs text-gray-400">
+            <div className="p-6 text-center text-xs text-slate-400">
               ✓ Không có sản phẩm nào thuộc diện cảnh báo
             </div>
           ) : (
             <table className="w-full text-xs">
-              <thead className="bg-gray-50/70 text-gray-500 font-medium">
+              <thead className="bg-slate-50/70 text-slate-500 font-medium">
                 <tr>
                   <th className="px-4 py-2 text-left">Mã</th>
                   <th className="px-4 py-2 text-left">Tên sản phẩm</th>
@@ -129,22 +129,22 @@ export function StockAlertCard({
                   <th className="px-4 py-2 text-center">Trạng thái</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {filtered.map((item) => {
                   const isOut = item.status === 'out_of_stock'
                   const isNegative = item.status === 'negative_stock'
                   return (
-                    <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
-                      <td className="px-4 py-2 font-mono text-gray-500">{item.productCode}</td>
+                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-4 py-2 font-mono text-slate-500">{item.productCode}</td>
                       <td
-                        className="px-4 py-2 text-gray-900 font-medium truncate max-w-[130px]"
+                        className="px-4 py-2 text-slate-900 font-medium truncate max-w-[130px]"
                         title={item.productName}
                       >
                         {item.productName}
                       </td>
-                      <td className="px-4 py-2 text-right font-bold text-gray-900">
+                      <td className="px-4 py-2 text-right font-bold text-slate-900">
                         {item.currentStock}{' '}
-                        <span className="text-[10px] font-normal text-gray-400">
+                        <span className="text-[10px] font-normal text-slate-400">
                           {item.inventoryUnit}
                         </span>
                       </td>
@@ -172,7 +172,7 @@ export function StockAlertCard({
         </div>
       </div>
       {isTruncated && (
-        <div className="border-t border-gray-100 bg-gray-50/60 px-4 py-1.5 text-center text-[11px] text-gray-500">
+        <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-1.5 text-center text-[11px] text-slate-500">
           Hiển thị tối đa 15 sản phẩm. (Tổng số: {currentCategoryCount})
         </div>
       )}

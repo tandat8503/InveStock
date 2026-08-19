@@ -62,7 +62,7 @@ export function Dashboard() {
   }, [fetchAnalytics])
 
   return (
-    <div className="flex flex-col gap-5 p-5 overflow-auto h-full bg-gray-50/40">
+    <div className="flex flex-col gap-5 p-5 overflow-auto h-full bg-slate-50">
       {/* 1. Header with Filters & Controls */}
       <DashboardHeader
         params={draftParams}
@@ -73,21 +73,21 @@ export function Dashboard() {
       />
 
       {data && (
-        <div className="grid gap-2 rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-sm text-blue-900 md:grid-cols-2">
-          <div className="flex items-start gap-2">
-            <CalendarRange size={16} className="mt-0.5 shrink-0 text-blue-600" />
+        <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 md:grid-cols-2">
+          <div className="flex items-start gap-2.5">
+            <CalendarRange size={16} className="mt-0.5 shrink-0 text-primary-600" />
             <div>
-              <p className="font-semibold">Kỳ phân tích giao dịch</p>
-              <p className="text-xs text-blue-700">
+              <p className="font-semibold text-slate-900">Kỳ phân tích giao dịch</p>
+              <p className="text-xs text-slate-500">
                 {formatDate(data.resolvedDateFrom)} – {formatDate(data.resolvedDateTo)} · {appliedParams.groupBy === 'month' ? 'Theo tháng' : appliedParams.groupBy === 'week' ? 'Theo tuần' : 'Theo ngày'}
               </p>
             </div>
           </div>
-          <div className="flex items-start gap-2 border-blue-200 md:border-l md:pl-3">
+          <div className="flex items-start gap-2.5 border-slate-200 md:border-l md:pl-4">
             <Clock3 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
             <div>
-              <p className="font-semibold">Snapshot tồn kho tại {formatDate(data.snapshotAsOf)}</p>
-              <p className="text-xs text-blue-700">Bao gồm số dư Q2 chuyển sang và mọi giao dịch phát sinh sau đó; không thay đổi theo bộ lọc kỳ.</p>
+              <p className="font-semibold text-slate-900">Snapshot tồn kho tại {formatDate(data.snapshotAsOf)}</p>
+              <p className="text-xs text-slate-500">Bao gồm số dư Q2 chuyển sang và mọi giao dịch phát sinh sau đó; không thay đổi theo bộ lọc kỳ.</p>
             </div>
           </div>
         </div>
@@ -100,7 +100,7 @@ export function Dashboard() {
       ) : !data ? null : (
         <>
           {/* 2. KPI Cards Row */}
-          {data.message && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{data.message}{data.revenueCoverage === 'partial' && <span className="ml-2 rounded-full bg-white px-2 py-0.5 text-xs font-semibold">Một phần dữ liệu</span>}</div>}
+          {data.message && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{data.message}{data.revenueCoverage === 'partial' && <span className="ml-2 rounded-full bg-white px-2 py-0.5 text-xs font-semibold">Một phần dữ liệu</span>}</div>}
           {data.dataSource === 'legacy' && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiCard title="Tồn đầu kỳ" metric={data.inventoryOpeningQuantity} subtitle={formatVND(data.inventoryOpeningValue)} icon={Package} accentColor="blue" />
             <KpiCard title="Nhập trong kỳ" metric={data.inventoryInQuantity} subtitle={formatVND(data.inventoryInValue)} icon={ArrowDownToLine} accentColor="purple" />

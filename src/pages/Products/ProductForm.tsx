@@ -1,8 +1,8 @@
 import { appCommands } from '@/lib/commands'
 import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Modal, Button, Input, Select, ConfirmDialog } from '@/components/ui'
-import { useState } from 'react'
+import { Modal, Button, Input, Select, UnsavedChangesDialog } from '@/components/ui'
+import { useState, useCallback } from 'react'
 import { createProductSchema, updateProductSchema, type CreateProductInput } from '@shared/schemas'
 import type { ProductDTO } from '@shared/ipc-types'
 import type { CommandResult } from '@/lib/commands/client'
@@ -60,7 +60,9 @@ export function ProductForm({ product, isOpen, onClose, onSuccess }: ProductForm
         },
   })
 
-  const onSubmit = async (data: ProductFormData) => {
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
+
+  const submitForm = useCallback(async (data: ProductFormData) => {
     try {
       let result: CommandResult<ProductDTO>
       if (isEditing && data.id) {
@@ -93,120 +95,133 @@ export function ProductForm({ product, isOpen, onClose, onSuccess }: ProductForm
           notify.error(result.error ?? 'Lỗi lưu sản phẩm')
         }
       }
-    } catch (error) {
+    } catch {
       notify.error('Lỗi hệ thống')
     }
-  }
+  }, [isEditing, product, notify, onSuccess, setError])
 
-  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false)
   const handleCloseAttempt = () => {
     if (isDirty) {
-      setShowUnsavedConfirm(true)
+      setShowUnsavedDialog(true)
     } else {
       onClose()
     }
   }
 
+  /**
+   * "Lưu thay đổi" in the UnsavedChangesDialog must ACTUALLY save.
+   * If save succeeds → onSuccess() closes the form.
+   * If save fails → errors shown in form, dialog closes, form stays open.
+   */
+  const handleSaveFromDialog = async () => {
+    setShowUnsavedDialog(false)
+    await handleSubmit(submitForm)()
+    // If submitForm succeeded it called onSuccess() which closes the modal.
+    // If it failed, setError was called and the form remains visible with errors.
+  }
+
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleCloseAttempt}
-      title={isEditing ? 'Sửa sản phẩm' : 'Thêm sản phẩm mới'}
-      size="lg"
-      footer={
-        <>
-          <Button onClick={() => { void handleSubmit(onSubmit)() }} isLoading={isSubmitting}>
-            Lưu
-          </Button>
-          <Button variant="secondary" onClick={handleCloseAttempt} disabled={isSubmitting}>
-            Hủy
-          </Button>
-        </>
-      }
-    >
-      <form onSubmit={(event) => { void handleSubmit(onSubmit)(event) }} className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Input
-              label="Mã sản phẩm"
-              required
-              {...register('productCode')}
-              error={errors.productCode?.message as string}
-            />
-            <p className="mt-1 text-xs text-gray-400">Chỉ dùng chữ, số, gạch ngang (-) hoặc gạch dưới (_). VD: CAM-LON-01</p>
-          </div>
-          <Input
-            label="Tên sản phẩm"
-            required
-            {...register('productName')}
-            error={errors.productName?.message as string}
-          />
-
-          <Select
-            label="Loại vật nuôi"
-            required
-            {...register('animalCategory')}
-            error={errors.animalCategory?.message as string}
-            options={[
-              { value: '', label: 'Chọn loại vật nuôi' },
-              { value: 'heo', label: 'Heo' },
-              { value: 'ga', label: 'Gà' },
-              { value: 'vit', label: 'Vịt' },
-              { value: 'bo', label: 'Bò' },
-              { value: 'de', label: 'Dê' },
-              { value: 'khac', label: 'Khác' },
-            ]}
-          />
-          <Input
-            label="Thương hiệu"
-            {...register('brand')}
-            error={errors.brand?.message as string}
-          />
-
-          <Controller
-            name="packageWeightGrams"
-            control={control}
-            render={({ field }) => (
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={handleCloseAttempt}
+        title={isEditing ? 'Sửa sản phẩm' : 'Thêm sản phẩm mới'}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={handleCloseAttempt} disabled={isSubmitting}>
+              Hủy
+            </Button>
+            <Button onClick={() => { void handleSubmit(submitForm)() }} isLoading={isSubmitting}>
+              {isEditing ? 'Lưu thay đổi' : 'Thêm sản phẩm'}
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={(event) => { void handleSubmit(submitForm)(event) }} className="space-y-5">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div>
               <Input
-                label="Trọng lượng (kg)"
-                type="number"
-                min={0}
-                step={0.001}
-                value={field.value > 0 ? field.value / 1000 : ''}
-                onChange={(event) => field.onChange(Math.round(Number(event.target.value) * 1000))}
-                error={errors.packageWeightGrams?.message as string}
+                label="Mã sản phẩm"
+                required
+                {...register('productCode')}
+                error={errors.productCode?.message as string}
               />
-            )}
-          />
+              <p className="mt-1.5 text-xs text-slate-400">
+                Chỉ dùng chữ, số, gạch ngang (-) hoặc gạch dưới (_). VD: CAM-LON-01
+              </p>
+            </div>
+            <Input
+              label="Tên sản phẩm"
+              required
+              {...register('productName')}
+              error={errors.productName?.message as string}
+            />
 
-          <Select
-            label="Đơn vị tính"
-            required
-            {...register('inventoryUnit')}
-            error={errors.inventoryUnit?.message as string}
-            options={[
-              { value: '', label: 'Chọn đơn vị tính' },
-              { value: 'Bao', label: 'Bao' },
-              { value: 'Tui', label: 'Túi' },
-              { value: 'Bich', label: 'Bịch' },
-            ]}
-          />
+            <Select
+              label="Loại vật nuôi"
+              required
+              {...register('animalCategory')}
+              error={errors.animalCategory?.message as string}
+              options={[
+                { value: '', label: 'Chọn loại vật nuôi' },
+                { value: 'heo', label: 'Heo' },
+                { value: 'ga', label: 'Gà' },
+                { value: 'vit', label: 'Vịt' },
+                { value: 'bo', label: 'Bò' },
+                { value: 'de', label: 'Dê' },
+                { value: 'khac', label: 'Khác' },
+              ]}
+            />
+            <Input
+              label="Thương hiệu"
+              {...register('brand')}
+              error={errors.brand?.message as string}
+            />
 
-        </div>
-      </form>
-      <ConfirmDialog
-        isOpen={showUnsavedConfirm}
-        title="Thoát khỏi biểu mẫu?"
-        message="Bạn có thay đổi chưa lưu. Bạn có chắc chắn muốn thoát?"
-        confirmText="Quay lại chỉnh sửa"
-        cancelText="Thoát không lưu"
-        type="warning"
-        onConfirm={() => setShowUnsavedConfirm(false)}
-        onCancel={() => {
-          setShowUnsavedConfirm(false)
+            <Controller
+              name="packageWeightGrams"
+              control={control}
+              render={({ field }) => (
+                <Input
+                  label="Trọng lượng (kg)"
+                  type="number"
+                  min={0}
+                  step={0.001}
+                  value={field.value > 0 ? field.value / 1000 : ''}
+                  onChange={(event) => field.onChange(Math.round(Number(event.target.value) * 1000))}
+                  error={errors.packageWeightGrams?.message as string}
+                />
+              )}
+            />
+
+            <Select
+              label="Đơn vị tính"
+              required
+              {...register('inventoryUnit')}
+              error={errors.inventoryUnit?.message as string}
+              options={[
+                { value: '', label: 'Chọn đơn vị tính' },
+                { value: 'Bao', label: 'Bao' },
+                { value: 'Tui', label: 'Túi' },
+                { value: 'Bich', label: 'Bịch' },
+              ]}
+            />
+          </div>
+        </form>
+      </Modal>
+
+      {/* UnsavedChangesDialog renders via Portal at z-[200] — never clipped by Modal */}
+      <UnsavedChangesDialog
+        isOpen={showUnsavedDialog}
+        mode="entity"
+        onSave={handleSaveFromDialog}
+        onDiscard={() => {
+          setShowUnsavedDialog(false)
           onClose()
         }}
+        onContinue={() => setShowUnsavedDialog(false)}
       />
-    </Modal>
+    </>
   )
 }

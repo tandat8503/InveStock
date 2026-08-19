@@ -150,9 +150,9 @@ export function DatePicker({
   return (
     <div className="w-full relative" ref={containerRef}>
       {label && (
-        <label className="form-label block text-sm font-medium text-gray-700 mb-1">
+        <label className="form-label">
           {label}
-          {required && <span className="text-danger-500 ml-1">*</span>}
+          {required && <span className="text-red-500 ml-1" aria-hidden="true">*</span>}
         </label>
       )}
 
@@ -169,9 +169,7 @@ export function DatePicker({
           onFocus={() => {
             if (!disabled) setIsOpen(true)
           }}
-          className={`form-input text-center px-9 cursor-pointer w-full rounded-md border border-gray-300 bg-white h-9 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-            error ? 'border-danger-500 focus:ring-danger-500' : ''
-          }`}
+          className={`form-input text-center px-9 cursor-pointer ${error ? 'form-input-error' : ''}`}
         />
 
         {/* Clear Button */}
@@ -179,7 +177,7 @@ export function DatePicker({
           <button
             type="button"
             onClick={handleClear}
-            className="absolute right-9 text-gray-400 hover:text-gray-600 transition-colors p-1"
+            className="absolute right-9 text-slate-400 hover:text-slate-600 transition-colors p-1"
             title="Xóa ngày"
           >
             <X size={14} />
@@ -193,39 +191,39 @@ export function DatePicker({
             if (!disabled) setIsOpen(!isOpen)
           }}
           disabled={disabled}
-          className="absolute right-2.5 flex items-center justify-center text-gray-400 hover:text-primary-600 transition-colors"
+          className="absolute right-2.5 flex items-center justify-center text-slate-400 hover:text-primary-600 transition-colors"
         >
           <CalendarIcon size={16} />
         </button>
 
         {/* Calendar Popover */}
         {isOpen && (
-          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 w-64 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50 animate-fade-in">
+          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-3 z-50 animate-fade-in">
             {/* Header */}
             <div className="flex items-center justify-between mb-3">
               <button
                 type="button"
                 onClick={handlePrevMonth}
-                className="p-1 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
+                className="p-1 rounded-md hover:bg-slate-100 text-slate-600 transition-colors"
               >
                 <ChevronLeft size={16} />
               </button>
 
-              <span className="text-xs font-bold text-gray-800 uppercase">
+              <span className="text-xs font-bold text-slate-700 uppercase">
                 {format(currentMonth, 'MMMM yyyy')}
               </span>
 
               <button
                 type="button"
                 onClick={handleNextMonth}
-                className="p-1 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
+                className="p-1 rounded-md hover:bg-slate-100 text-slate-600 transition-colors"
               >
                 <ChevronRight size={16} />
               </button>
             </div>
 
             {/* Weekdays */}
-            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-400 uppercase mb-1">
+            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 uppercase mb-1">
               {weekdays.map((day) => (
                 <div key={day} className="py-0.5">
                   {day}
@@ -247,12 +245,12 @@ export function DatePicker({
                     onClick={() => handleSelectDay(day)}
                     className={`h-7 w-7 text-xs rounded-full flex items-center justify-center transition-all ${
                       !isCurrentMonth
-                        ? 'text-gray-300 hover:bg-gray-50'
+                        ? 'text-slate-300 hover:bg-slate-50'
                         : isSel
                         ? 'bg-primary-600 text-white font-semibold'
                         : isTod
                         ? 'bg-primary-50 border border-primary-200 text-primary-700 font-semibold'
-                        : 'text-gray-700 hover:bg-gray-100'
+                        : 'text-slate-700 hover:bg-slate-100'
                     }`}
                   >
                     {day.getDate()}
@@ -264,7 +262,7 @@ export function DatePicker({
         )}
       </div>
 
-      {error && <p className="mt-1 text-xs text-danger-500">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-600" role="alert">{error}</p>}
     </div>
   )
 }

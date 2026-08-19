@@ -16,7 +16,6 @@ import {
   FileText,
   PieChart,
   Settings,
-  ChevronRight,
 } from 'lucide-react'
 
 const navItems = [
@@ -58,22 +57,21 @@ export function Sidebar() {
   }, [])
 
   return (
-    <aside className="w-56 bg-sidebar-bg flex flex-col h-full flex-shrink-0">
-      {/* Logo / App name */}
-      <div className="px-4 py-4 border-b border-slate-700">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary-500 flex items-center justify-center flex-shrink-0">
-            <Package size={16} className="text-white" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-white text-sm font-semibold leading-tight truncate">InveStock</p>
-            <p className="text-sidebar-text text-xs leading-tight">Quản lý kho</p>
-          </div>
+    // w-60 (240px) — Hr-management standard
+    <aside className="w-60 bg-sidebar-bg flex flex-col h-full flex-shrink-0 select-none">
+      {/* Logo / App Name */}
+      <div className="flex items-center gap-3 px-5 py-6 border-b border-slate-800">
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary-600 shadow-lg shadow-primary-600/30">
+          <Package size={20} className="text-white" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-white leading-tight">InveStock</p>
+          <p className="text-xs text-slate-400 leading-tight">Quản lý kho</p>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-3 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5 overflow-y-auto">
         {navItems.map((item) => (
           <NavLink
             data-testid={`nav-${item.to.slice(1)}`}
@@ -86,43 +84,50 @@ export function Sidebar() {
               }
             }}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg text-sm transition-colors duration-150 group ${
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? 'bg-primary-600 text-white font-medium'
-                  : 'text-sidebar-text hover:bg-sidebar-hover hover:text-white'
+                  ? 'bg-primary-600 text-white shadow-md shadow-primary-600/25'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
               }`
             }
           >
             {({ isActive }) => (
               <>
-                <item.icon size={16} className={isActive ? 'text-white' : 'text-sidebar-text group-hover:text-white'} />
-                <span className="flex-1 truncate">{item.label}</span>
-                {isActive && <ChevronRight size={14} className="text-white opacity-60" />}
+                <item.icon
+                  size={18}
+                  className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`}
+                />
+                <span className="truncate">{item.label}</span>
               </>
             )}
           </NavLink>
         ))}
       </nav>
 
-      {/* Bottom info */}
-      <div className="px-4 py-3 border-t border-slate-700">
+      {/* Footer — backup status + version */}
+      <div className="px-5 py-4 border-t border-slate-800">
         {backupStatus && (
-          <NavLink to="/settings" title={backupStatus.message} className="mb-2 flex items-center gap-2 text-xs text-sidebar-text hover:text-white">
-            <span className={`h-2 w-2 rounded-full ${backupStatus.healthy && !backupStatus.usingFallback ? 'bg-green-400' : 'bg-amber-400'}`} />
-            <span>{backupStatusText(backupStatus).label}</span>
+          <NavLink
+            to="/settings"
+            title={backupStatus.message}
+            className="mb-2 flex items-center gap-2 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            <span
+              className={`h-2 w-2 flex-shrink-0 rounded-full ${
+                backupStatus.healthy && !backupStatus.usingFallback ? 'bg-emerald-400' : 'bg-amber-400'
+              }`}
+            />
+            <span className="truncate">{backupStatusText(backupStatus).label}</span>
           </NavLink>
         )}
-        <p className="text-sidebar-text text-xs">{version ? `v${version}` : ''}</p>
+        <p className="text-xs text-slate-600">{version ? `v${version}` : ''}</p>
       </div>
 
-      {/* Unsaved Settings Dialog — replaces window.confirm */}
+      {/* Unsaved Settings Dialog (Option A: no fake Save button) */}
       <UnsavedChangesDialog
         isOpen={pendingNav !== null}
         mode="entity"
-        onSave={() => {
-          // Navigate to settings so user can save first
-          setPendingNav(null)
-        }}
+        onSave={undefined}
         onDiscard={() => {
           setSettingsDirty(false)
           if (pendingNav) navigate(pendingNav)

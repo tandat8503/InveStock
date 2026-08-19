@@ -120,7 +120,7 @@ export function ProductSearchCombobox({
   return (
     <div className="w-full relative" ref={containerRef}>
       {label && (
-        <label className="form-label block text-sm font-medium text-gray-700 mb-1">
+        <label className="form-label">
           {label}
         </label>
       )}
@@ -144,16 +144,14 @@ export function ProductSearchCombobox({
             if (!disabled) setIsOpen(true)
           }}
           onKeyDown={handleKeyDown}
-          className={`form-input pl-9 w-full rounded-md border border-gray-300 bg-white h-9 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-            error ? 'border-danger-500 focus:ring-danger-500' : ''
-          }`}
+          className={`form-input pl-9 ${error ? 'form-input-error' : ''}`}
         />
 
         {/* Dropdown Results List */}
         {isOpen && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 max-h-60 overflow-y-auto">
+          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl py-1 z-50 max-h-60 overflow-y-auto">
             {products.length === 0 ? (
-              <div className="px-4 py-2.5 text-xs text-gray-500 text-center">
+              <div className="px-4 py-2.5 text-xs text-slate-500 text-center">
                 {loading ? 'Đang tìm kiếm sản phẩm...' : 'Không tìm thấy sản phẩm nào'}
               </div>
             ) : (
@@ -162,14 +160,14 @@ export function ProductSearchCombobox({
                   key={product.id}
                   type="button"
                   onClick={() => handleSelect(product)}
-                  className={`w-full text-left px-3 py-2 text-xs transition-colors flex flex-col gap-0.5 hover:bg-gray-50 ${
-                    idx === activeIndex ? 'bg-primary-50 text-primary-800' : 'text-gray-700'
+                  className={`w-full text-left px-3 py-2 text-xs transition-colors flex flex-col gap-0.5 hover:bg-slate-50 ${
+                    idx === activeIndex ? 'bg-primary-50 text-primary-800' : 'text-slate-700'
                   }`}
                 >
-                  <span className="font-semibold text-gray-900">
+                  <span className="font-semibold text-slate-900">
                     {product.productCode} — {product.productName}
                   </span>
-                  <span className="text-[10px] text-gray-500">
+                  <span className="text-[10px] text-slate-500">
                     Tồn kho: {product.currentStock} {product.inventoryUnit} · Phân loại: {product.animalCategory}
                   </span>
                 </button>
@@ -179,7 +177,7 @@ export function ProductSearchCombobox({
         )}
       </div>
 
-      {error && <p className="mt-1 text-xs text-danger-500">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-600" role="alert">{error}</p>}
     </div>
   )
 }

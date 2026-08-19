@@ -28,14 +28,9 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
     }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      // Remove all non-digits
       const raw = e.target.value.replace(/\D/g, '')
       const num = raw ? parseInt(raw, 10) : 0
-      
-      // Update display with formatting while typing
       setDisplayValue(raw ? new Intl.NumberFormat('vi-VN').format(num) : '')
-      
-      // Pass integer to parent
       onChange(num)
     }
 
@@ -44,7 +39,7 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
         {label && (
           <label htmlFor={inputId} className="form-label">
             {label}
-            {props.required && <span className="text-danger-500 ml-1">*</span>}
+            {props.required && <span className="text-red-500 ml-1" aria-hidden="true">*</span>}
           </label>
         )}
         <div className="relative">
@@ -59,10 +54,10 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
             {...props}
           />
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-            <span className="text-gray-500 sm:text-sm">VND</span>
+            <span className="text-sm text-slate-400 font-medium">VND</span>
           </div>
         </div>
-        {error && <p className="mt-1 text-sm text-danger-500">{error}</p>}
+        {error && <p className="mt-1 text-xs text-red-600" role="alert">{error}</p>}
       </div>
     )
   }

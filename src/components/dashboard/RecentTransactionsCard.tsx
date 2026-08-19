@@ -12,17 +12,17 @@ import { getInventoryTransactionMeta } from '@/utils/transaction'
 export function RecentTransactionsCard({ transactions, periodLabel }: RecentTransactionsCardProps) {
   return (
     <div className="card flex flex-col h-full min-h-0">
-      <div className="flex-none flex items-center gap-2 border-b border-gray-100 px-4 py-3">
-        <History size={16} className="text-gray-500" />
+      <div className="flex-none flex items-center gap-2 border-b border-slate-100 px-4 py-3">
+        <History size={16} className="text-slate-500" />
         <div>
-          <h2 className="text-sm font-bold text-gray-900">Giao dịch gần nhất trong kỳ</h2>
-          {periodLabel && <p className="text-[10px] text-gray-400">{periodLabel}</p>}
+          <h2 className="text-sm font-bold text-slate-900">Giao dịch gần nhất trong kỳ</h2>
+          {periodLabel && <p className="text-[10px] text-slate-400">{periodLabel}</p>}
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-gray-100 flex flex-col">
+      <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100 flex flex-col">
         {transactions.length === 0 ? (
-          <div className="flex-1 min-h-[160px] flex items-center justify-center p-6 text-center text-xs text-gray-400">
+          <div className="flex-1 min-h-[160px] flex items-center justify-center p-6 text-center text-xs text-slate-400">
             Chưa có giao dịch kho gần đây.
           </div>
         ) : (
@@ -33,7 +33,7 @@ export function RecentTransactionsCard({ transactions, periodLabel }: RecentTran
             return (
               <div
                 key={tx.id}
-                className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50/80 transition-colors flex-shrink-0 min-h-[56px]"
+                className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/80 transition-colors flex-shrink-0 min-h-[56px]"
               >
                 <div
                   className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border ${
@@ -54,8 +54,8 @@ export function RecentTransactionsCard({ transactions, periodLabel }: RecentTran
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-gray-900">{tx.productName}</p>
-                  <p className="text-[11px] text-gray-400">
+                  <p className="truncate text-xs font-semibold text-slate-900">{tx.productName}</p>
+                  <p className="text-[11px] text-slate-400">
                     {meta.label}
                     {' · '}
                     {formatDate(tx.transactionDate)}

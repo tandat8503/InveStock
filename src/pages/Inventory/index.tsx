@@ -135,8 +135,8 @@ export function InventoryPage() {
     <div className="flex h-full flex-col p-4 sm:p-5 lg:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Tồn kho</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="page-title">Tồn kho</h1>
+          <p className="page-subtitle">
             {viewMode === 'current'
               ? 'Ảnh chụp tồn kho tại ngày hôm nay'
               : 'Tồn cuối tại ngày kết thúc kỳ đã chọn'}

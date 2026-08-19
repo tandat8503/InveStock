@@ -1,5 +1,22 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
+import { Portal } from './Portal'
+
+// Reference-counted body scroll lock.
+// Multiple modals can stack without fighting over document.body.style.overflow.
+let scrollLockCount = 0
+function lockScroll() {
+  scrollLockCount++
+  if (scrollLockCount === 1) {
+    document.body.style.overflow = 'hidden'
+  }
+}
+function unlockScroll() {
+  scrollLockCount = Math.max(0, scrollLockCount - 1)
+  if (scrollLockCount === 0) {
+    document.body.style.overflow = ''
+  }
+}
 
 export interface ModalProps {
   isOpen: boolean
@@ -11,23 +28,32 @@ export interface ModalProps {
 }
 
 export function Modal({ isOpen, onClose, title, children, footer, size = 'md' }: ModalProps) {
+  const closedRef = useRef(false)
+
   useEffect(() => {
+    if (!isOpen) return
+
+    closedRef.current = false
+    lockScroll()
+
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      // Only respond if no higher-z dialog is consuming this event
+      if (e.key === 'Escape' && !e.defaultPrevented) {
+        e.preventDefault()
+        onClose()
+      }
     }
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'hidden'
-    }
+    document.addEventListener('keydown', handleEscape)
+
     return () => {
       document.removeEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'auto'
+      unlockScroll()
     }
   }, [isOpen, onClose])
 
   if (!isOpen) return null
 
-  const sizeClasses = {
+  const sizeClasses: Record<NonNullable<ModalProps['size']>, string> = {
     sm: 'max-w-md',
     md: 'max-w-lg',
     lg: 'max-w-2xl',
@@ -35,39 +61,53 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md' }:
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-      <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={onClose} />
-        
-        <div className={`relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full ${sizeClasses[size]}`}>
+    <Portal>
+      {/* Overlay – z-[100] so ConfirmDialog/UnsavedChangesDialog can sit at z-[200] above */}
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        {/* Backdrop */}
+        <div
+          className="absolute inset-0 bg-black/40"
+          aria-hidden="true"
+          onClick={onClose}
+        />
+
+        {/* Panel — NO overflow-hidden here (that was the root cause of the clipping bug) */}
+        <div
+          className={`relative flex max-h-[90vh] w-full flex-col rounded-2xl bg-white shadow-2xl ${sizeClasses[size]}`}
+        >
           {/* Header */}
-          <div className="bg-white px-4 py-4 sm:px-6 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="text-lg font-medium leading-6 text-gray-900" id="modal-title">
+          <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-200 px-6 py-4">
+            <h3 className="text-base font-semibold text-slate-900" id="modal-title">
               {title}
             </h3>
             <button
               type="button"
-              className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
               onClick={onClose}
+              aria-label="Đóng"
             >
-              <span className="sr-only">Close panel</span>
-              <X className="h-6 w-6" aria-hidden="true" />
+              <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
 
           {/* Body */}
-          <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4 max-h-[70vh] overflow-y-auto">
+          <div className="flex-1 overflow-y-auto px-6 py-5">
             {children}
           </div>
 
           {/* Footer */}
           {footer && (
-            <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-t border-gray-200 gap-2">
+            <div className="flex flex-shrink-0 items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
               {footer}
             </div>
           )}
         </div>
       </div>
-    </div>
+    </Portal>
   )
 }

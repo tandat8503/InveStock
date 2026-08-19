@@ -7,12 +7,16 @@ export interface StatusBadgeProps {
 export function StatusBadge({ active, activeText = 'Hoạt động', inactiveText = 'Ngừng kinh doanh' }: StatusBadgeProps) {
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
         active
-          ? 'bg-success-100 text-success-700'
-          : 'bg-gray-100 text-gray-600'
+          ? 'bg-emerald-100 text-emerald-700'
+          : 'bg-slate-100 text-slate-500'
       }`}
     >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-slate-400'}`}
+        aria-hidden="true"
+      />
       {active ? activeText : inactiveText}
     </span>
   )
