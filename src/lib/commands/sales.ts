@@ -1,3 +1,13 @@
-import type { CreateSalesInvoiceInput, PaginatedResult, SalesInvoiceDTO, SalesListParams } from '@shared/ipc-types'
+import type { CreateSalesInvoiceInput, FifoAllocationPreviewDTO, PaginatedResult, SalesInvoiceDTO, SalesListParams } from '@shared/ipc-types'
 import { command } from './client'
-export const sales = { list: (params: SalesListParams) => command<PaginatedResult<SalesInvoiceDTO>>('get_sales_invoices', { params }), get: (id: number) => command<SalesInvoiceDTO | null>('get_sales_invoice_by_id', { id }), create: (input: CreateSalesInvoiceInput) => command<SalesInvoiceDTO>('create_sales_invoice_draft', { input }), updateDraft: (id: number, input: CreateSalesInvoiceInput) => command<SalesInvoiceDTO>('update_sales_invoice_draft', { id, input }), deleteDraft: (id: number) => command<boolean>('delete_sales_invoice_draft', { id }), confirm: (id: number) => command<SalesInvoiceDTO>('confirm_sales_invoice', { id }), cancel: (id: number, reason: string) => command<SalesInvoiceDTO>('cancel_sales_invoice', { id, reason }) }
+
+export const sales = {
+  list: (params: SalesListParams) => command<PaginatedResult<SalesInvoiceDTO>>('get_sales_invoices', { params }),
+  get: (id: number) => command<SalesInvoiceDTO | null>('get_sales_invoice_by_id', { id }),
+  create: (input: CreateSalesInvoiceInput) => command<SalesInvoiceDTO>('create_sales_invoice_draft', { input }),
+  updateDraft: (id: number, input: CreateSalesInvoiceInput) => command<SalesInvoiceDTO>('update_sales_invoice_draft', { id, input }),
+  deleteDraft: (id: number) => command<boolean>('delete_sales_invoice_draft', { id }),
+  confirm: (id: number) => command<SalesInvoiceDTO>('confirm_sales_invoice', { id }),
+  cancel: (id: number, reason: string) => command<SalesInvoiceDTO>('cancel_sales_invoice', { id, reason }),
+  previewFifo: (productId: number, quantity: number, saleDate: string) => command<FifoAllocationPreviewDTO>('preview_fifo_allocation', { productId, quantity, saleDate }),
+}

@@ -3,6 +3,7 @@ use crate::domain::inventory_invariant::validate_inventory_state;
 use crate::domain::models::{CreatePurchaseInvoiceInput, PurchaseInvoice, PurchaseInvoiceItem};
 use crate::domain::validation::{iso_date, positive, required};
 use crate::infrastructure::database::connection::DbPool;
+use crate::services::sale_service::rebuild_product_fifo_allocations;
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::collections::HashSet;
 
@@ -490,6 +491,10 @@ impl PurchaseService {
             params![id],
         )?;
 
+        for item in &items {
+            rebuild_product_fifo_allocations(&tx, item.product_id)?;
+        }
+
         tx.commit()?;
         self.get_by_id(id)?
             .ok_or_else(|| AppError::Internal("Confirmed purchase invoice not found".to_string()))
@@ -665,13 +670,14 @@ impl PurchaseService {
             .map(|item| item.product_id)
             .collect::<HashSet<_>>();
         for product_id in affected_products {
+            rebuild_product_fifo_allocations(&tx, product_id)?;
             let latest_price: Option<i64> = tx
                 .query_row(
                     "SELECT pii.effective_unit_cost
                      FROM purchase_invoice_items pii
                      JOIN purchase_invoices pi ON pi.id = pii.purchase_invoice_id
                      WHERE pii.product_id = ?1 AND pi.status = 'xac_nhan'
-                     ORDER BY pi.received_date DESC, pi.id DESC, pii.id DESC
+                     ORDER BY pi.invoice_date DESC, pi.id DESC, pii.id DESC
                      LIMIT 1",
                     [product_id],
                     |row| row.get(0),

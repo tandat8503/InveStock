@@ -289,6 +289,26 @@ export interface SalesInvoiceDTO {
   items: SalesInvoiceItemDTO[]
 }
 
+export interface FifoLotBreakdownItemDTO {
+  purchaseInvoiceId: number
+  purchaseInvoiceItemId: number
+  invoiceNumber: string
+  invoiceDate: string
+  quantityAllocated: number
+  unitCost: number
+  lineCost: number
+}
+
+export interface FifoAllocationPreviewDTO {
+  productId: number
+  requestedQuantity: number
+  totalAvailableStock: number
+  isSufficient: boolean
+  totalFifoCost: number
+  weightedUnitCost: number
+  lots: FifoLotBreakdownItemDTO[]
+}
+
 export interface SalesListParams {
   search?: string
   buyerType?: BuyerType

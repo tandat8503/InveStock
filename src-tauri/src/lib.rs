@@ -128,7 +128,8 @@ pub fn run() {
         create_inventory_adjustment,
         get_inventory_adjustments,
         get_current_inventory,
-        check_inventory_data_health
+        check_inventory_data_health,
+        preview_fifo_allocation
     ]);
 
     #[cfg(not(any(debug_assertions, feature = "dev-seed")))]
@@ -182,7 +183,8 @@ pub fn run() {
         create_inventory_adjustment,
         get_inventory_adjustments,
         get_current_inventory,
-        check_inventory_data_health
+        check_inventory_data_health,
+        preview_fifo_allocation
     ]);
 
     builder

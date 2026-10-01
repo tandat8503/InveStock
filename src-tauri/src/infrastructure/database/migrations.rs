@@ -1,6 +1,6 @@
 use rusqlite::{Connection, OptionalExtension, Result};
 
-pub const LATEST_SCHEMA_VERSION: i64 = 12;
+pub const LATEST_SCHEMA_VERSION: i64 = 13;
 
 pub fn requires_pre_migration_backup(schema_version: i64) -> bool {
     schema_version > 0 && schema_version < LATEST_SCHEMA_VERSION
@@ -54,6 +54,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     }
     if current_version < 12 {
         apply_migration_12(conn)?;
+    }
+    if current_version < 13 {
+        apply_migration_13(conn)?;
     }
 
     Ok(())
@@ -882,6 +885,33 @@ fn apply_migration_12(conn: &Connection) -> Result<()> {
             Err(error)
         }
     }
+}
+
+fn apply_migration_13(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "
+        BEGIN TRANSACTION;
+
+        CREATE TABLE IF NOT EXISTS inventory_allocations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sales_invoice_id INTEGER NOT NULL REFERENCES sales_invoices(id) ON DELETE CASCADE,
+            sales_invoice_item_id INTEGER NOT NULL REFERENCES sales_invoice_items(id) ON DELETE CASCADE,
+            purchase_invoice_id INTEGER NOT NULL REFERENCES purchase_invoices(id),
+            purchase_invoice_item_id INTEGER NOT NULL REFERENCES purchase_invoice_items(id),
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            quantity INTEGER NOT NULL,
+            unit_cost INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_inventory_allocations_sales_item ON inventory_allocations(sales_invoice_item_id);
+        CREATE INDEX IF NOT EXISTS idx_inventory_allocations_purchase_item ON inventory_allocations(purchase_invoice_item_id);
+        CREATE INDEX IF NOT EXISTS idx_inventory_allocations_product ON inventory_allocations(product_id);
+
+        INSERT OR IGNORE INTO schema_migrations (version) VALUES (13);
+        COMMIT;
+        ",
+    )
 }
 
 #[cfg(test)]

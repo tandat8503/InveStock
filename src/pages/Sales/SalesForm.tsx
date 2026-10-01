@@ -5,7 +5,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button, CurrencyInput, DatePicker, ProductSearchCombobox, Input, Modal, Select, UnsavedChangesDialog } from '@/components/ui'
 import { createSalesInvoiceSchema, type CreateSalesInvoiceInput } from '@shared/schemas'
-import type { ProductDTO, SalesInvoiceDTO } from '@shared/ipc-types'
+import type { FifoAllocationPreviewDTO, ProductDTO, SalesInvoiceDTO } from '@shared/ipc-types'
 import { useNotify } from '@/stores/uiStore'
 
 
@@ -15,6 +15,7 @@ export function SalesForm({ sale, open, onClose, onSuccess }: { sale?: SalesInvo
   const [selected, setSelected] = useState('')
   const [quantity, setQuantity] = useState<number | ''>('')
   const [lineTotalSale, setLineTotalSale] = useState<number | ''>('')
+  const [fifoPreview, setFifoPreview] = useState<FifoAllocationPreviewDTO | null>(null)
   const [preview, setPreview] = useState(false)
   const [error, setError] = useState('')
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false)
@@ -23,6 +24,8 @@ export function SalesForm({ sale, open, onClose, onSuccess }: { sale?: SalesInvo
     resolver: zodResolver(createSalesInvoiceSchema),
     defaultValues: { electronicInvoiceNumber: '', invoiceDate: localDateISO(), buyerType: 'khach_le', buyerName: '', notes: '', items: [] },
   })
+
+  const invoiceDate = watch('invoiceDate')
 
   useEffect(() => {
     if (!open) return
@@ -41,7 +44,19 @@ export function SalesForm({ sale, open, onClose, onSuccess }: { sale?: SalesInvo
     setSelected('')
     setQuantity('')
     setLineTotalSale('')
+    setFifoPreview(null)
   }, [open, reset, sale])
+
+  useEffect(() => {
+    if (selected && quantity && typeof quantity === 'number' && quantity > 0 && invoiceDate) {
+      void appCommands.sales.previewFifo(Number(selected), quantity, invoiceDate).then((res) => {
+        if (res.data) setFifoPreview(res.data)
+        else setFifoPreview(null)
+      })
+    } else {
+      setFifoPreview(null)
+    }
+  }, [selected, quantity, invoiceDate])
 
   const items = watch('items')
 
@@ -96,6 +111,7 @@ export function SalesForm({ sale, open, onClose, onSuccess }: { sale?: SalesInvo
     setSelected('')
     setQuantity('')
     setLineTotalSale('')
+    setFifoPreview(null)
   }
 
   const handleCloseAttempt = () => {
@@ -120,6 +136,11 @@ export function SalesForm({ sale, open, onClose, onSuccess }: { sale?: SalesInvo
       }
     >
       <div className="space-y-4">
+        <div className="flex justify-between items-center bg-blue-50/50 p-2.5 rounded-lg border border-blue-100 text-xs text-blue-800">
+          <span className="font-medium">📦 Tồn kho xuất theo nguyên tắc FIFO (Nhập trước — Xuất trước).</span>
+          <span>Giá bán do người dùng nhập thủ công.</span>
+        </div>
+
         <div className="grid gap-3 md:grid-cols-4">
           <Input label="Số HĐ điện tử" {...register('electronicInvoiceNumber')} placeholder="VD: HD001" />
 
@@ -191,6 +212,32 @@ export function SalesForm({ sale, open, onClose, onSuccess }: { sale?: SalesInvo
             <div className="md:col-span-1">
               <Button type="button" onClick={add} className="w-full">Thêm</Button>
             </div>
+
+            {fifoPreview && (
+              <div className="md:col-span-12 mt-2 rounded bg-blue-50/70 p-2 text-xs text-blue-900 border border-blue-100 space-y-1">
+                <div className="flex items-center justify-between font-semibold">
+                  <span>Dự kiến phân bổ tồn kho (FIFO):</span>
+                  <span className={fifoPreview.isSufficient ? 'text-green-700 font-bold' : 'text-red-700 font-bold'}>
+                    {fifoPreview.isSufficient ? '✓ Đủ tồn kho' : '⚠ Vượt quá tồn kho khả dụng'}
+                  </span>
+                </div>
+                {fifoPreview.lots.length > 0 ? (
+                  <div className="space-y-0.5 text-gray-700">
+                    {fifoPreview.lots.map((lot, idx) => (
+                      <div key={idx} className="flex justify-between">
+                        <span>• Lô nhập {lot.invoiceDate} (Mã HĐ: {lot.invoiceNumber}): {lot.quantityAllocated} bao @ {lot.unitCost.toLocaleString('vi-VN')} ₫</span>
+                        <span>Giá vốn lô: {lot.lineCost.toLocaleString('vi-VN')} ₫</span>
+                      </div>
+                    ))}
+                    <div className="pt-1 border-t border-blue-200/60 font-medium flex justify-between text-blue-950">
+                      <span>Tổng giá vốn (COGS): {fifoPreview.totalFifoCost.toLocaleString('vi-VN')} ₫ (TB {fifoPreview.weightedUnitCost.toLocaleString('vi-VN')} ₫/bao)</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-gray-600">Chưa có lô nhập hợp lệ tính đến ngày {invoiceDate}.</p>
+                )}
+              </div>
+            )}
           </div>
         )}
 

@@ -795,3 +795,27 @@ pub struct CreateInventoryAdjustmentInput {
     pub adjustment_date: String,
     pub adjustment_unit_cost: Option<i64>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FifoLotBreakdownItemDTO {
+    pub purchase_invoice_id: i64,
+    pub purchase_invoice_item_id: i64,
+    pub invoice_number: String,
+    pub invoice_date: String,
+    pub quantity_allocated: i64,
+    pub unit_cost: i64,
+    pub line_cost: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FifoAllocationPreviewDTO {
+    pub product_id: i64,
+    pub requested_quantity: i64,
+    pub total_available_stock: i64,
+    pub is_sufficient: bool,
+    pub total_fifo_cost: i64,
+    pub weighted_unit_cost: i64,
+    pub lots: Vec<FifoLotBreakdownItemDTO>,
+}

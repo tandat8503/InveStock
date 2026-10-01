@@ -3,7 +3,7 @@ use crate::domain::inventory_invariant::validate_inventory_state;
 use crate::domain::models::{CreateSalesInvoiceInput, SalesInvoice, SalesInvoiceItem};
 use crate::domain::validation::{iso_date, one_of, positive};
 use crate::infrastructure::database::connection::DbPool;
-use rusqlite::{params, Connection, TransactionBehavior};
+use rusqlite::{params, Connection, Transaction, TransactionBehavior};
 use std::collections::HashSet;
 
 pub struct SaleService {
@@ -357,137 +357,64 @@ impl SaleService {
             )));
         }
 
-        struct DraftItem {
-            item_id: i64,
-            product_id: i64,
-            quantity: i64,
-            line_revenue: i64,
+        tx.execute(
+            "UPDATE sales_invoices SET status = 'xac_nhan', confirmed_at = datetime('now', 'localtime') WHERE id = ?1",
+            params![id],
+        )?;
+
+        tx.execute(
+            "UPDATE sales_invoices SET status = 'xac_nhan', confirmed_at = datetime('now', 'localtime') WHERE id = ?1",
+            params![id],
+        )?;
+
+        let product_ids: Vec<i64> = {
+            let mut stmt = tx.prepare("SELECT DISTINCT product_id FROM sales_invoice_items WHERE sales_invoice_id = ?1")?;
+            let res = stmt.query_map(params![id], |r| r.get(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            res
+        };
+
+        for pid in product_ids {
+            rebuild_product_fifo_allocations(&tx, pid)?;
         }
 
-        let mut draft_items = Vec::new();
-        {
-            let mut stmt = tx.prepare("SELECT id, product_id, quantity, line_revenue FROM sales_invoice_items WHERE sales_invoice_id = ?1")?;
-            let rows = stmt.query_map(params![id], |r| {
-                Ok(DraftItem {
-                    item_id: r.get(0)?,
-                    product_id: r.get(1)?,
-                    quantity: r.get(2)?,
-                    line_revenue: r.get(3)?,
-                })
-            })?;
-            for r in rows {
-                draft_items.push(r?);
-            }
-        }
+        let items_list: Vec<(i64, i64, i64, i64)> = {
+            let mut item_stmt = tx.prepare("SELECT product_id, quantity, unit_cost_at_sale, line_cost FROM sales_invoice_items WHERE sales_invoice_id = ?1")?;
+            let res = item_stmt.query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+                .collect::<Result<Vec<_>, _>>()?;
+            res
+        };
 
-        let mut total_cost: i64 = 0;
-        let mut total_profit: i64 = 0;
-
-        for item in draft_items {
-            let (product_name, current_stock, average_cost, inventory_value): (String, i64, i64, i64) = tx.query_row(
-                "SELECT product_name, current_stock, average_cost,current_inventory_value FROM products WHERE id = ?1",
-                params![item.product_id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?,r.get(3)?)),
-            )?;
-
-            if current_stock < item.quantity {
-                return Err(AppError::InsufficientStock(format!(
-                    "Sản phẩm '{}' chỉ còn {} bao trong kho, không thể xuất {} bao",
-                    product_name, current_stock, item.quantity
-                )));
-            }
-
-            let line_cost = if item.quantity == current_stock {
-                inventory_value
-            } else {
-                ((inventory_value as i128 * item.quantity as i128) / current_stock as i128) as i64
-            };
-            let unit_cost_at_sale = if item.quantity > 0 {
-                line_cost / item.quantity
-            } else {
-                0
-            };
-            let line_revenue = item.line_revenue;
-            let line_profit = line_revenue - line_cost;
-
-            total_cost += line_cost;
-            total_profit += line_profit;
-
-            let new_stock = current_stock - item.quantity;
-            let new_inventory_value = inventory_value - line_cost;
-            let new_average_cost = if new_stock != 0 {
-                (new_inventory_value as f64 / new_stock as f64)
-                    .abs()
-                    .round() as i64
-            } else {
-                0
-            };
-            validate_inventory_state(new_stock, new_inventory_value, new_average_cost, false)?;
-
-            tx.execute(
-                "UPDATE sales_invoice_items SET
-                    unit_cost_at_sale = ?1,
-                    line_revenue = ?2,
-                    line_cost = ?3,
-                    estimated_profit = ?4
-                 WHERE id = ?5",
-                params![
-                    unit_cost_at_sale,
-                    line_revenue,
-                    line_cost,
-                    line_profit,
-                    item.item_id
-                ],
-            )?;
-
-            tx.execute(
-                "UPDATE products SET
-                    current_stock = ?1,
-                    current_inventory_value=?2,
-                    average_cost=?3,
-                    updated_at = datetime('now', 'localtime')
-                 WHERE id = ?4",
-                params![
-                    new_stock,
-                    new_inventory_value,
-                    new_average_cost,
-                    item.product_id
-                ],
+        for (product_id, quantity, unit_cost_at_sale, line_cost) in items_list {
+            let (current_stock, average_cost, inventory_value): (i64, i64, i64) = tx.query_row(
+                "SELECT current_stock, average_cost, current_inventory_value FROM products WHERE id = ?1",
+                params![product_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )?;
 
             tx.execute(
                 "INSERT INTO inventory_transactions (
                     transaction_date, product_id, transaction_type, source_type, source_id,
                     quantity_in, quantity_out, unit_cost, stock_before, stock_after,
-                    old_average_cost, new_average_cost,value_in,value_out,
-                    inventory_value_before,inventory_value_after
-                ) VALUES (?1, ?2, 'xuat', 'sales_invoice', ?3, 0, ?4, ?5, ?6, ?7, ?8, ?9,0,?10,?11,?12)",
+                    old_average_cost, new_average_cost, value_in, value_out,
+                    inventory_value_before, inventory_value_after
+                ) VALUES (?1, ?2, 'xuat', 'sales_invoice', ?3, 0, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, ?11, ?12)",
                 params![
                     invoice_date,
-                    item.product_id,
+                    product_id,
                     id,
-                    item.quantity,
+                    quantity,
                     unit_cost_at_sale,
+                    current_stock + quantity,
                     current_stock,
-                    new_stock,
                     average_cost,
-                    new_average_cost,
+                    average_cost,
                     line_cost,
-                    inventory_value,
-                    new_inventory_value
+                    inventory_value + line_cost,
+                    inventory_value
                 ],
             )?;
         }
-
-        tx.execute(
-            "UPDATE sales_invoices SET
-                status = 'xac_nhan',
-                total_cost = ?1,
-                estimated_profit = ?2,
-                confirmed_at = datetime('now', 'localtime')
-             WHERE id = ?3",
-            params![total_cost, total_profit, id],
-        )?;
 
         tx.commit()?;
         self.get_by_id(id)?
@@ -523,68 +450,40 @@ impl SaleService {
             ));
         }
 
-        struct SaleItemDetail {
-            product_id: i64,
-            quantity: i64,
-            line_cost: i64,
-            unit_cost_at_sale: i64,
-        }
-
-        let mut items = Vec::new();
-        {
-            let mut stmt = tx.prepare("SELECT product_id, quantity, line_cost, unit_cost_at_sale FROM sales_invoice_items WHERE sales_invoice_id = ?1")?;
-            let rows = stmt.query_map(params![id], |r| {
-                Ok(SaleItemDetail {
-                    product_id: r.get(0)?,
-                    quantity: r.get(1)?,
-                    line_cost: r.get(2)?,
-                    unit_cost_at_sale: r.get(3)?,
-                })
-            })?;
-            for row in rows {
-                items.push(row?);
-            }
-        }
-
         let cancel_date = chrono::Local::now().format("%Y-%m-%d").to_string();
 
-        for item in items {
-            let (old_stock, old_avg_cost, old_inventory_value): (i64, i64, i64) = tx.query_row(
+        let product_ids: Vec<i64> = {
+            let mut stmt = tx.prepare("SELECT DISTINCT product_id FROM sales_invoice_items WHERE sales_invoice_id = ?1")?;
+            let res = stmt.query_map(params![id], |r| r.get(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            res
+        };
+
+        tx.execute(
+            "UPDATE sales_invoices SET
+                status = 'huy',
+                cancelled_at = datetime('now', 'localtime'),
+                cancellation_reason = ?1
+             WHERE id = ?2",
+            params![reason, id],
+        )?;
+
+        for pid in product_ids {
+            rebuild_product_fifo_allocations(&tx, pid)?;
+        }
+
+        let items_list: Vec<(i64, i64, i64, i64)> = {
+            let mut item_stmt = tx.prepare("SELECT product_id, quantity, unit_cost_at_sale, line_cost FROM sales_invoice_items WHERE sales_invoice_id = ?1")?;
+            let res = item_stmt.query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+                .collect::<Result<Vec<_>, _>>()?;
+            res
+        };
+
+        for (product_id, quantity, unit_cost_at_sale, line_cost) in items_list {
+            let (current_stock, average_cost, inventory_value): (i64, i64, i64) = tx.query_row(
                 "SELECT current_stock, average_cost, current_inventory_value FROM products WHERE id = ?1",
-                params![item.product_id],
+                params![product_id],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )?;
-
-            let new_stock = old_stock + item.quantity;
-            let value_in = item.line_cost;
-            let new_inventory_value = old_inventory_value + value_in;
-            let new_avg_cost = if new_stock != 0 {
-                (new_inventory_value as f64 / new_stock as f64)
-                    .abs()
-                    .round() as i64
-            } else {
-                0
-            };
-            validate_inventory_state(
-                new_stock,
-                new_inventory_value,
-                new_avg_cost,
-                old_stock < 0 && new_stock < 0,
-            )?;
-
-            tx.execute(
-                "UPDATE products SET
-                    current_stock = ?1,
-                    average_cost = ?2,
-                    current_inventory_value = ?3,
-                    updated_at = datetime('now', 'localtime')
-                 WHERE id = ?4",
-                params![
-                    new_stock,
-                    new_avg_cost,
-                    new_inventory_value,
-                    item.product_id
-                ],
             )?;
 
             tx.execute(
@@ -596,34 +495,320 @@ impl SaleService {
                 ) VALUES (?1, ?2, 'sale_cancel', 'sales_invoice', ?3, ?4, 0, ?5, ?6, ?7, ?8, ?9, ?10, 0, ?11, ?12)",
                 params![
                     cancel_date,
-                    item.product_id,
+                    product_id,
                     id,
-                    item.quantity,
-                    item.unit_cost_at_sale,
-                    old_stock,
-                    new_stock,
-                    old_avg_cost,
-                    new_avg_cost,
-                    value_in,
-                    old_inventory_value,
-                    new_inventory_value
+                    quantity,
+                    unit_cost_at_sale,
+                    current_stock - quantity,
+                    current_stock,
+                    average_cost,
+                    average_cost,
+                    line_cost,
+                    inventory_value - line_cost,
+                    inventory_value
                 ],
             )?;
         }
-
-        tx.execute(
-            "UPDATE sales_invoices SET
-                status = 'huy',
-                cancelled_at = datetime('now', 'localtime'),
-                cancellation_reason = ?1
-             WHERE id = ?2",
-            params![reason, id],
-        )?;
 
         tx.commit()?;
         self.get_by_id(id)?
             .ok_or_else(|| AppError::Internal("Cancelled sales invoice not found".to_string()))
     }
+
+    pub fn preview_fifo_allocation(
+        &self,
+        product_id: i64,
+        quantity: i64,
+        sale_date: String,
+    ) -> AppResult<crate::domain::models::FifoAllocationPreviewDTO> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        struct LotRow {
+            purchase_invoice_id: i64,
+            purchase_invoice_item_id: i64,
+            invoice_number: String,
+            invoice_date: String,
+            total_quantity: i64,
+            allocated_quantity: i64,
+            effective_unit_cost: i64,
+        }
+
+        let mut stmt = conn.prepare(
+            "SELECT pi.id, pii.id, pi.invoice_number, pi.invoice_date, pii.quantity,
+                    COALESCE((SELECT SUM(a.quantity) FROM inventory_allocations a WHERE a.purchase_invoice_item_id = pii.id), 0) as allocated,
+                    pii.effective_unit_cost
+             FROM purchase_invoice_items pii
+             JOIN purchase_invoices pi ON pi.id = pii.purchase_invoice_id
+             WHERE pii.product_id = ?1 AND pi.status = 'xac_nhan' AND pi.invoice_date <= ?2
+             ORDER BY pi.invoice_date ASC, pi.created_at ASC, pi.id ASC, pii.id ASC"
+        )?;
+
+        let lots_iter = stmt.query_map(params![product_id, sale_date], |r| {
+            Ok(LotRow {
+                purchase_invoice_id: r.get(0)?,
+                purchase_invoice_item_id: r.get(1)?,
+                invoice_number: r.get(2)?,
+                invoice_date: r.get(3)?,
+                total_quantity: r.get(4)?,
+                allocated_quantity: r.get(5)?,
+                effective_unit_cost: r.get(6)?,
+            })
+        })?;
+
+        let mut lots_breakdown = Vec::new();
+        let mut remaining_needed = quantity;
+        let mut total_fifo_cost: i64 = 0;
+        let mut total_available_stock: i64 = 0;
+
+        for lot in lots_iter {
+            let lot = lot?;
+            let available = lot.total_quantity - lot.allocated_quantity;
+            if available > 0 {
+                total_available_stock += available;
+                if remaining_needed > 0 {
+                    let take = std::cmp::min(available, remaining_needed);
+                    remaining_needed -= take;
+                    let line_cost = take * lot.effective_unit_cost;
+                    total_fifo_cost += line_cost;
+                    lots_breakdown.push(crate::domain::models::FifoLotBreakdownItemDTO {
+                        purchase_invoice_id: lot.purchase_invoice_id,
+                        purchase_invoice_item_id: lot.purchase_invoice_item_id,
+                        invoice_number: lot.invoice_number,
+                        invoice_date: lot.invoice_date,
+                        quantity_allocated: take,
+                        unit_cost: lot.effective_unit_cost,
+                        line_cost,
+                    });
+                }
+            }
+        }
+
+        let is_sufficient = remaining_needed == 0;
+        let weighted_unit_cost = if quantity > 0 && is_sufficient {
+            total_fifo_cost / quantity
+        } else {
+            0
+        };
+
+        Ok(crate::domain::models::FifoAllocationPreviewDTO {
+            product_id,
+            requested_quantity: quantity,
+            total_available_stock,
+            is_sufficient,
+            total_fifo_cost,
+            weighted_unit_cost,
+            lots: lots_breakdown,
+        })
+    }
+}
+
+pub fn rebuild_product_fifo_allocations(tx: &Transaction, product_id: i64) -> AppResult<()> {
+    tx.execute(
+        "DELETE FROM inventory_allocations WHERE product_id = ?1",
+        params![product_id],
+    )?;
+
+    struct LotInfo {
+        purchase_invoice_id: i64,
+        purchase_invoice_item_id: i64,
+        invoice_number: String,
+        invoice_date: String,
+        initial_quantity: i64,
+        remaining_quantity: i64,
+        effective_unit_cost: i64,
+    }
+
+    let mut stmt_lots = tx.prepare(
+        "SELECT pi.id, pii.id, pi.invoice_number, pi.invoice_date, pii.quantity, pii.effective_unit_cost
+         FROM purchase_invoice_items pii
+         JOIN purchase_invoices pi ON pi.id = pii.purchase_invoice_id
+         WHERE pii.product_id = ?1 AND pi.status = 'xac_nhan'
+         ORDER BY pi.invoice_date ASC, pi.created_at ASC, pi.id ASC, pii.id ASC"
+    )?;
+
+    let mut lots: Vec<LotInfo> = stmt_lots
+        .query_map(params![product_id], |row: &rusqlite::Row| {
+            let qty: i64 = row.get(4)?;
+            Ok(LotInfo {
+                purchase_invoice_id: row.get(0)?,
+                purchase_invoice_item_id: row.get(1)?,
+                invoice_number: row.get(2)?,
+                invoice_date: row.get(3)?,
+                initial_quantity: qty,
+                remaining_quantity: qty,
+                effective_unit_cost: row.get(5)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    struct SaleItemInfo {
+        sales_invoice_id: i64,
+        sales_invoice_item_id: i64,
+        invoice_date: String,
+        quantity: i64,
+        unit_sale_price: i64,
+        line_revenue: i64,
+    }
+
+    let mut stmt_sales = tx.prepare(
+        "SELECT si.id, sii.id, si.invoice_date, sii.quantity, sii.unit_sale_price, sii.line_revenue
+         FROM sales_invoice_items sii
+         JOIN sales_invoices si ON si.id = sii.sales_invoice_id
+         WHERE sii.product_id = ?1 AND si.status = 'xac_nhan'
+         ORDER BY si.invoice_date ASC, si.created_at ASC, si.id ASC, sii.id ASC"
+    )?;
+
+    let sales_items: Vec<SaleItemInfo> = stmt_sales
+        .query_map(params![product_id], |row: &rusqlite::Row| {
+            Ok(SaleItemInfo {
+                sales_invoice_id: row.get(0)?,
+                sales_invoice_item_id: row.get(1)?,
+                invoice_date: row.get(2)?,
+                quantity: row.get(3)?,
+                unit_sale_price: row.get(4)?,
+                line_revenue: row.get(5)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let product_name: String = tx
+        .query_row(
+            "SELECT product_name FROM products WHERE id = ?1",
+            params![product_id],
+            |row: &rusqlite::Row| row.get(0),
+        )
+        .unwrap_or_else(|_| format!("ID {}", product_id));
+
+    let mut modified_sales_invoices: HashSet<i64> = HashSet::new();
+
+    for sale in sales_items {
+        let mut remaining_to_allocate = sale.quantity;
+        let mut total_item_cost: i64 = 0;
+
+        for lot in lots.iter_mut() {
+            if remaining_to_allocate <= 0 {
+                break;
+            }
+
+            if lot.invoice_date > sale.invoice_date {
+                continue;
+            }
+
+            if lot.remaining_quantity <= 0 {
+                continue;
+            }
+
+            let take = std::cmp::min(lot.remaining_quantity, remaining_to_allocate);
+            lot.remaining_quantity -= take;
+            remaining_to_allocate -= take;
+
+            let line_cost = take * lot.effective_unit_cost;
+            total_item_cost += line_cost;
+
+            tx.execute(
+                "INSERT INTO inventory_allocations (
+                    sales_invoice_id, sales_invoice_item_id, purchase_invoice_id,
+                    purchase_invoice_item_id, product_id, quantity, unit_cost
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    sale.sales_invoice_id,
+                    sale.sales_invoice_item_id,
+                    lot.purchase_invoice_id,
+                    lot.purchase_invoice_item_id,
+                    product_id,
+                    take,
+                    lot.effective_unit_cost
+                ],
+            )?;
+        }
+
+        if remaining_to_allocate > 0 {
+            let total_available_on_date: i64 = lots
+                .iter()
+                .filter(|l| l.invoice_date <= sale.invoice_date)
+                .map(|l| l.remaining_quantity + (l.initial_quantity - l.remaining_quantity))
+                .sum();
+            return Err(AppError::InsufficientStock(format!(
+                "Tồn kho khả dụng đến ngày {} của sản phẩm '{}' chỉ còn {} bao. Không thể xuất {} bao.",
+                sale.invoice_date, product_name, total_available_on_date, sale.quantity
+            )));
+        }
+
+        let unit_cost_at_sale = if sale.quantity > 0 {
+            total_item_cost / sale.quantity
+        } else {
+            0
+        };
+        let line_profit = sale.line_revenue - total_item_cost;
+
+        tx.execute(
+            "UPDATE sales_invoice_items SET
+                unit_cost_at_sale = ?1,
+                line_cost = ?2,
+                estimated_profit = ?3
+             WHERE id = ?4",
+            params![
+                unit_cost_at_sale,
+                total_item_cost,
+                line_profit,
+                sale.sales_invoice_item_id
+            ],
+        )?;
+
+        modified_sales_invoices.insert(sale.sales_invoice_id);
+    }
+
+    for invoice_id in modified_sales_invoices {
+        let (total_cost, total_profit): (i64, i64) = tx.query_row(
+            "SELECT COALESCE(SUM(line_cost), 0), COALESCE(SUM(estimated_profit), 0)
+             FROM sales_invoice_items WHERE sales_invoice_id = ?1",
+            params![invoice_id],
+            |row: &rusqlite::Row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+
+        tx.execute(
+            "UPDATE sales_invoices SET
+                total_cost = ?1,
+                estimated_profit = ?2
+             WHERE id = ?3",
+            params![total_cost, total_profit, invoice_id],
+        )?;
+    }
+
+    let total_purchased_qty: i64 = lots.iter().map(|l| l.initial_quantity).sum();
+    let total_purchased_val: i64 = lots.iter().map(|l| l.initial_quantity * l.effective_unit_cost).sum();
+    let total_sold_qty: i64 = lots.iter().map(|l| l.initial_quantity - l.remaining_quantity).sum();
+    let total_sold_cost: i64 = lots.iter().map(|l| (l.initial_quantity - l.remaining_quantity) * l.effective_unit_cost).sum();
+
+    let current_stock = total_purchased_qty - total_sold_qty;
+    let current_inventory_value = total_purchased_val - total_sold_cost;
+    let average_cost = if current_stock > 0 {
+        (current_inventory_value as f64 / current_stock as f64).round() as i64
+    } else {
+        0
+    };
+
+    validate_inventory_state(current_stock, current_inventory_value, average_cost, false)?;
+
+    tx.execute(
+        "UPDATE products SET
+            current_stock = ?1,
+            current_inventory_value = ?2,
+            average_cost = ?3,
+            updated_at = datetime('now', 'localtime')
+         WHERE id = ?4",
+        params![
+            current_stock,
+            current_inventory_value,
+            average_cost,
+            product_id
+        ],
+    )?;
+
+    Ok(())
 }
 
 fn validate_sale_input(input: &CreateSalesInvoiceInput) -> AppResult<()> {

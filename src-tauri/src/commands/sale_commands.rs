@@ -1,6 +1,7 @@
 use crate::domain::errors::AppResult;
 use crate::domain::models::{
-    CreateSalesInvoiceInput, PaginatedResult, SalesInvoice, SalesInvoiceListParams,
+    CreateSalesInvoiceInput, FifoAllocationPreviewDTO, PaginatedResult, SalesInvoice,
+    SalesInvoiceListParams,
 };
 use crate::services::sale_service::SaleService;
 use crate::state::AppState;
@@ -75,4 +76,16 @@ pub fn cancel_sales_invoice(
     reason: String,
 ) -> AppResult<SalesInvoice> {
     state.with_pool(|pool| SaleService::new(pool).cancel(id, reason))
+}
+
+#[tauri::command]
+pub fn preview_fifo_allocation(
+    state: State<'_, AppState>,
+    product_id: i64,
+    quantity: i64,
+    sale_date: String,
+) -> AppResult<FifoAllocationPreviewDTO> {
+    state.with_pool(|pool| {
+        SaleService::new(pool).preview_fifo_allocation(product_id, quantity, sale_date)
+    })
 }

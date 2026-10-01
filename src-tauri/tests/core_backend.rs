@@ -2175,3 +2175,194 @@ fn test_health_check_detects_mismatch_and_anomalies() {
     let health2 = inventory_service.check_inventory_data_health().unwrap();
     assert!(!health2.is_healthy);
 }
+
+#[test]
+fn test_fifo_basic_allocation_and_user_sale_price() {
+    let fixture = Fixture::new();
+    let product_id = fixture.product("FIFO-PROD-A");
+    let supplier_id = fixture.supplier();
+    let purchases = PurchaseService::new(fixture.pool.clone());
+    let sales = SaleService::new(fixture.pool.clone());
+
+    // Lot 1: 02/09/2026 - 100 units @ 5,000,000 total (50,000 each)
+    let p1_input = CreatePurchaseInvoiceInput {
+        invoice_number: "PN001".to_string(),
+        invoice_date: "2026-09-02".to_string(),
+        received_date: "2026-09-02".to_string(),
+        supplier_id,
+        notes: None,
+        items: vec![CreatePurchaseItemInput {
+            product_id,
+            quantity: 100,
+            line_total: 5_000_000,
+            notes: None,
+        }],
+    };
+    let p1 = purchases.create_draft(p1_input).unwrap();
+    purchases.confirm(p1.id).unwrap();
+
+    // Lot 2: 15/09/2026 - 150 units @ 10,000,000 total (66,666 each)
+    let p2_input = CreatePurchaseInvoiceInput {
+        invoice_number: "PN002".to_string(),
+        invoice_date: "2026-09-15".to_string(),
+        received_date: "2026-09-15".to_string(),
+        supplier_id,
+        notes: None,
+        items: vec![CreatePurchaseItemInput {
+            product_id,
+            quantity: 150,
+            line_total: 10_000_000,
+            notes: None,
+        }],
+    };
+    let p2 = purchases.create_draft(p2_input).unwrap();
+    purchases.confirm(p2.id).unwrap();
+
+    // Sale: 16/09/2026 - 160 units @ user price 11,000,000
+    let s_input = CreateSalesInvoiceInput {
+        electronic_invoice_number: Some("PX001".to_string()),
+        invoice_date: "2026-09-16".to_string(),
+        buyer_type: "khach_le".to_string(),
+        buyer_name: Some("Khach A".to_string()),
+        notes: None,
+        items: vec![CreateSalesItemInput {
+            product_id,
+            quantity: 160,
+            line_total_sale: 11_000_000,
+        }],
+    };
+    let s_draft = sales.create_draft(s_input).unwrap();
+    let s_confirmed = sales.confirm(s_draft.id).unwrap();
+
+    // 1. Verify user unit sale price is NOT overwritten by FIFO (11,000,000 / 160 = 68,750)
+    assert_eq!(s_confirmed.items[0].unit_sale_price, 68_750);
+    assert_eq!(s_confirmed.items[0].line_revenue, 11_000_000);
+
+    // 2. Verify FIFO COGS: 100 * 50,000 + 60 * 66,666 = 5,000_000 + 3,999,960 = 8,999,960
+    assert_eq!(s_confirmed.items[0].line_cost, 8_999_960);
+
+    // 3. Verify total remaining stock = 90 (250 - 160)
+    let prod = ProductService::new(fixture.pool.clone()).get_by_id(product_id).unwrap().unwrap();
+    assert_eq!(prod.current_stock, 90);
+
+    // 4. Verify allocations in database
+    let conn = fixture.pool.get().unwrap();
+    let allocs: Vec<(i64, i64)> = conn.prepare("SELECT quantity, unit_cost FROM inventory_allocations WHERE product_id=?1 ORDER BY id ASC")
+        .unwrap()
+        .query_map([product_id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+    assert_eq!(allocs.len(), 2);
+    assert_eq!(allocs[0], (100, 50_000));
+    assert_eq!(allocs[1], (60, 66_666));
+}
+
+#[test]
+fn test_fifo_insufficient_stock_and_date_boundary() {
+    let fixture = Fixture::new();
+    let product_id = fixture.product("FIFO-DATE");
+    let supplier_id = fixture.supplier();
+    let purchases = PurchaseService::new(fixture.pool.clone());
+    let sales = SaleService::new(fixture.pool.clone());
+
+    // Purchase on 15/09/2026: 100 units
+    let p_input = CreatePurchaseInvoiceInput {
+        invoice_number: "PN100".to_string(),
+        invoice_date: "2026-09-15".to_string(),
+        received_date: "2026-09-15".to_string(),
+        supplier_id,
+        notes: None,
+        items: vec![CreatePurchaseItemInput {
+            product_id,
+            quantity: 100,
+            line_total: 1_000_000,
+            notes: None,
+        }],
+    };
+    let p = purchases.create_draft(p_input).unwrap();
+    purchases.confirm(p.id).unwrap();
+
+    // Sale on 10/09/2026 (BEFORE purchase date): Should fail because stock is 0 on 10/09
+    let s_early_input = CreateSalesInvoiceInput {
+        electronic_invoice_number: Some("PX-EARLY".to_string()),
+        invoice_date: "2026-09-10".to_string(),
+        buyer_type: "khach_le".to_string(),
+        buyer_name: None,
+        notes: None,
+        items: vec![CreateSalesItemInput {
+            product_id,
+            quantity: 50,
+            line_total_sale: 600_000,
+        }],
+    };
+    let s_early = sales.create_draft(s_early_input).unwrap();
+    assert!(matches!(sales.confirm(s_early.id), Err(AppError::InsufficientStock(_))));
+
+    // Sale on 16/09/2026 for 120 units (exceeds available 100): Should fail
+    let s_over_input = CreateSalesInvoiceInput {
+        electronic_invoice_number: Some("PX-OVER".to_string()),
+        invoice_date: "2026-09-16".to_string(),
+        buyer_type: "khach_le".to_string(),
+        buyer_name: None,
+        notes: None,
+        items: vec![CreateSalesItemInput {
+            product_id,
+            quantity: 120,
+            line_total_sale: 1_500_000,
+        }],
+    };
+    let s_over = sales.create_draft(s_over_input).unwrap();
+    assert!(matches!(sales.confirm(s_over.id), Err(AppError::InsufficientStock(_))));
+}
+
+#[test]
+fn test_fifo_cancel_sale_releases_allocations() {
+    let fixture = Fixture::new();
+    let product_id = fixture.product("FIFO-CANCEL");
+    let supplier_id = fixture.supplier();
+    let purchases = PurchaseService::new(fixture.pool.clone());
+    let sales = SaleService::new(fixture.pool.clone());
+
+    let p = purchases.create_draft(CreatePurchaseInvoiceInput {
+        invoice_number: "PN-C1".to_string(),
+        invoice_date: "2026-09-01".to_string(),
+        received_date: "2026-09-01".to_string(),
+        supplier_id,
+        notes: None,
+        items: vec![CreatePurchaseItemInput {
+            product_id,
+            quantity: 100,
+            line_total: 1_000_000,
+            notes: None,
+        }],
+    }).unwrap();
+    purchases.confirm(p.id).unwrap();
+
+    let s = sales.create_draft(CreateSalesInvoiceInput {
+        electronic_invoice_number: Some("PX-C1".to_string()),
+        invoice_date: "2026-09-05".to_string(),
+        buyer_type: "khach_le".to_string(),
+        buyer_name: None,
+        notes: None,
+        items: vec![CreateSalesItemInput {
+            product_id,
+            quantity: 60,
+            line_total_sale: 800_000,
+        }],
+    }).unwrap();
+    let confirmed_sale = sales.confirm(s.id).unwrap();
+    assert_eq!(ProductService::new(fixture.pool.clone()).get_by_id(product_id).unwrap().unwrap().current_stock, 40);
+
+    // Cancel the sale
+    sales.cancel(confirmed_sale.id, "Khach tra hang".to_string()).unwrap();
+
+    // Stock should be restored to 100
+    assert_eq!(ProductService::new(fixture.pool.clone()).get_by_id(product_id).unwrap().unwrap().current_stock, 100);
+
+    // Allocations should be 0
+    let conn = fixture.pool.get().unwrap();
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM inventory_allocations WHERE product_id=?1", [product_id], |r| r.get(0)).unwrap();
+    assert_eq!(count, 0);
+}
