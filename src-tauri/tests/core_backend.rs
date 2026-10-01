@@ -2242,7 +2242,10 @@ fn test_fifo_basic_allocation_and_user_sale_price() {
     assert_eq!(s_confirmed.items[0].line_cost, 8_999_960);
 
     // 3. Verify total remaining stock = 90 (250 - 160)
-    let prod = ProductService::new(fixture.pool.clone()).get_by_id(product_id).unwrap().unwrap();
+    let prod = ProductService::new(fixture.pool.clone())
+        .get_by_id(product_id)
+        .unwrap()
+        .unwrap();
     assert_eq!(prod.current_stock, 90);
 
     // 4. Verify allocations in database
@@ -2298,7 +2301,10 @@ fn test_fifo_insufficient_stock_and_date_boundary() {
         }],
     };
     let s_early = sales.create_draft(s_early_input).unwrap();
-    assert!(matches!(sales.confirm(s_early.id), Err(AppError::InsufficientStock(_))));
+    assert!(matches!(
+        sales.confirm(s_early.id),
+        Err(AppError::InsufficientStock(_))
+    ));
 
     // Sale on 16/09/2026 for 120 units (exceeds available 100): Should fail
     let s_over_input = CreateSalesInvoiceInput {
@@ -2314,7 +2320,10 @@ fn test_fifo_insufficient_stock_and_date_boundary() {
         }],
     };
     let s_over = sales.create_draft(s_over_input).unwrap();
-    assert!(matches!(sales.confirm(s_over.id), Err(AppError::InsufficientStock(_))));
+    assert!(matches!(
+        sales.confirm(s_over.id),
+        Err(AppError::InsufficientStock(_))
+    ));
 }
 
 #[test]
@@ -2325,44 +2334,70 @@ fn test_fifo_cancel_sale_releases_allocations() {
     let purchases = PurchaseService::new(fixture.pool.clone());
     let sales = SaleService::new(fixture.pool.clone());
 
-    let p = purchases.create_draft(CreatePurchaseInvoiceInput {
-        invoice_number: "PN-C1".to_string(),
-        invoice_date: "2026-09-01".to_string(),
-        received_date: "2026-09-01".to_string(),
-        supplier_id,
-        notes: None,
-        items: vec![CreatePurchaseItemInput {
-            product_id,
-            quantity: 100,
-            line_total: 1_000_000,
+    let p = purchases
+        .create_draft(CreatePurchaseInvoiceInput {
+            invoice_number: "PN-C1".to_string(),
+            invoice_date: "2026-09-01".to_string(),
+            received_date: "2026-09-01".to_string(),
+            supplier_id,
             notes: None,
-        }],
-    }).unwrap();
+            items: vec![CreatePurchaseItemInput {
+                product_id,
+                quantity: 100,
+                line_total: 1_000_000,
+                notes: None,
+            }],
+        })
+        .unwrap();
     purchases.confirm(p.id).unwrap();
 
-    let s = sales.create_draft(CreateSalesInvoiceInput {
-        electronic_invoice_number: Some("PX-C1".to_string()),
-        invoice_date: "2026-09-05".to_string(),
-        buyer_type: "khach_le".to_string(),
-        buyer_name: None,
-        notes: None,
-        items: vec![CreateSalesItemInput {
-            product_id,
-            quantity: 60,
-            line_total_sale: 800_000,
-        }],
-    }).unwrap();
+    let s = sales
+        .create_draft(CreateSalesInvoiceInput {
+            electronic_invoice_number: Some("PX-C1".to_string()),
+            invoice_date: "2026-09-05".to_string(),
+            buyer_type: "khach_le".to_string(),
+            buyer_name: None,
+            notes: None,
+            items: vec![CreateSalesItemInput {
+                product_id,
+                quantity: 60,
+                line_total_sale: 800_000,
+            }],
+        })
+        .unwrap();
     let confirmed_sale = sales.confirm(s.id).unwrap();
-    assert_eq!(ProductService::new(fixture.pool.clone()).get_by_id(product_id).unwrap().unwrap().current_stock, 40);
+    assert_eq!(
+        ProductService::new(fixture.pool.clone())
+            .get_by_id(product_id)
+            .unwrap()
+            .unwrap()
+            .current_stock,
+        40
+    );
 
     // Cancel the sale
-    sales.cancel(confirmed_sale.id, "Khach tra hang".to_string()).unwrap();
+    sales
+        .cancel(confirmed_sale.id, "Khach tra hang".to_string())
+        .unwrap();
 
     // Stock should be restored to 100
-    assert_eq!(ProductService::new(fixture.pool.clone()).get_by_id(product_id).unwrap().unwrap().current_stock, 100);
+    assert_eq!(
+        ProductService::new(fixture.pool.clone())
+            .get_by_id(product_id)
+            .unwrap()
+            .unwrap()
+            .current_stock,
+        100
+    );
 
     // Allocations should be 0
     let conn = fixture.pool.get().unwrap();
-    let count: i64 = conn.query_row("SELECT COUNT(*) FROM inventory_allocations WHERE product_id=?1", [product_id], |r| r.get(0)).unwrap();
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM inventory_allocations WHERE product_id=?1",
+            [product_id],
+            |r| r.get(0),
+        )
+        .unwrap();
     assert_eq!(count, 0);
 }

@@ -368,8 +368,11 @@ impl SaleService {
         )?;
 
         let product_ids: Vec<i64> = {
-            let mut stmt = tx.prepare("SELECT DISTINCT product_id FROM sales_invoice_items WHERE sales_invoice_id = ?1")?;
-            let res = stmt.query_map(params![id], |r| r.get(0))?
+            let mut stmt = tx.prepare(
+                "SELECT DISTINCT product_id FROM sales_invoice_items WHERE sales_invoice_id = ?1",
+            )?;
+            let res = stmt
+                .query_map(params![id], |r| r.get(0))?
                 .collect::<Result<Vec<_>, _>>()?;
             res
         };
@@ -380,7 +383,10 @@ impl SaleService {
 
         let items_list: Vec<(i64, i64, i64, i64)> = {
             let mut item_stmt = tx.prepare("SELECT product_id, quantity, unit_cost_at_sale, line_cost FROM sales_invoice_items WHERE sales_invoice_id = ?1")?;
-            let res = item_stmt.query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+            let res = item_stmt
+                .query_map(params![id], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                })?
                 .collect::<Result<Vec<_>, _>>()?;
             res
         };
@@ -453,8 +459,11 @@ impl SaleService {
         let cancel_date = chrono::Local::now().format("%Y-%m-%d").to_string();
 
         let product_ids: Vec<i64> = {
-            let mut stmt = tx.prepare("SELECT DISTINCT product_id FROM sales_invoice_items WHERE sales_invoice_id = ?1")?;
-            let res = stmt.query_map(params![id], |r| r.get(0))?
+            let mut stmt = tx.prepare(
+                "SELECT DISTINCT product_id FROM sales_invoice_items WHERE sales_invoice_id = ?1",
+            )?;
+            let res = stmt
+                .query_map(params![id], |r| r.get(0))?
                 .collect::<Result<Vec<_>, _>>()?;
             res
         };
@@ -474,7 +483,10 @@ impl SaleService {
 
         let items_list: Vec<(i64, i64, i64, i64)> = {
             let mut item_stmt = tx.prepare("SELECT product_id, quantity, unit_cost_at_sale, line_cost FROM sales_invoice_items WHERE sales_invoice_id = ?1")?;
-            let res = item_stmt.query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+            let res = item_stmt
+                .query_map(params![id], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                })?
                 .collect::<Result<Vec<_>, _>>()?;
             res
         };
@@ -614,7 +626,6 @@ pub fn rebuild_product_fifo_allocations(tx: &Transaction, product_id: i64) -> Ap
     struct LotInfo {
         purchase_invoice_id: i64,
         purchase_invoice_item_id: i64,
-        invoice_number: String,
         invoice_date: String,
         initial_quantity: i64,
         remaining_quantity: i64,
@@ -622,24 +633,23 @@ pub fn rebuild_product_fifo_allocations(tx: &Transaction, product_id: i64) -> Ap
     }
 
     let mut stmt_lots = tx.prepare(
-        "SELECT pi.id, pii.id, pi.invoice_number, pi.invoice_date, pii.quantity, pii.effective_unit_cost
+        "SELECT pi.id, pii.id, pi.invoice_date, pii.quantity, pii.effective_unit_cost
          FROM purchase_invoice_items pii
          JOIN purchase_invoices pi ON pi.id = pii.purchase_invoice_id
          WHERE pii.product_id = ?1 AND pi.status = 'xac_nhan'
-         ORDER BY pi.invoice_date ASC, pi.created_at ASC, pi.id ASC, pii.id ASC"
+         ORDER BY pi.invoice_date ASC, pi.created_at ASC, pi.id ASC, pii.id ASC",
     )?;
 
     let mut lots: Vec<LotInfo> = stmt_lots
         .query_map(params![product_id], |row: &rusqlite::Row| {
-            let qty: i64 = row.get(4)?;
+            let qty: i64 = row.get(3)?;
             Ok(LotInfo {
                 purchase_invoice_id: row.get(0)?,
                 purchase_invoice_item_id: row.get(1)?,
-                invoice_number: row.get(2)?,
-                invoice_date: row.get(3)?,
+                invoice_date: row.get(2)?,
                 initial_quantity: qty,
                 remaining_quantity: qty,
-                effective_unit_cost: row.get(5)?,
+                effective_unit_cost: row.get(4)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -649,16 +659,15 @@ pub fn rebuild_product_fifo_allocations(tx: &Transaction, product_id: i64) -> Ap
         sales_invoice_item_id: i64,
         invoice_date: String,
         quantity: i64,
-        unit_sale_price: i64,
         line_revenue: i64,
     }
 
     let mut stmt_sales = tx.prepare(
-        "SELECT si.id, sii.id, si.invoice_date, sii.quantity, sii.unit_sale_price, sii.line_revenue
+        "SELECT si.id, sii.id, si.invoice_date, sii.quantity, sii.line_revenue
          FROM sales_invoice_items sii
          JOIN sales_invoices si ON si.id = sii.sales_invoice_id
          WHERE sii.product_id = ?1 AND si.status = 'xac_nhan'
-         ORDER BY si.invoice_date ASC, si.created_at ASC, si.id ASC, sii.id ASC"
+         ORDER BY si.invoice_date ASC, si.created_at ASC, si.id ASC, sii.id ASC",
     )?;
 
     let sales_items: Vec<SaleItemInfo> = stmt_sales
@@ -668,8 +677,7 @@ pub fn rebuild_product_fifo_allocations(tx: &Transaction, product_id: i64) -> Ap
                 sales_invoice_item_id: row.get(1)?,
                 invoice_date: row.get(2)?,
                 quantity: row.get(3)?,
-                unit_sale_price: row.get(4)?,
-                line_revenue: row.get(5)?,
+                line_revenue: row.get(4)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -779,9 +787,18 @@ pub fn rebuild_product_fifo_allocations(tx: &Transaction, product_id: i64) -> Ap
     }
 
     let total_purchased_qty: i64 = lots.iter().map(|l| l.initial_quantity).sum();
-    let total_purchased_val: i64 = lots.iter().map(|l| l.initial_quantity * l.effective_unit_cost).sum();
-    let total_sold_qty: i64 = lots.iter().map(|l| l.initial_quantity - l.remaining_quantity).sum();
-    let total_sold_cost: i64 = lots.iter().map(|l| (l.initial_quantity - l.remaining_quantity) * l.effective_unit_cost).sum();
+    let total_purchased_val: i64 = lots
+        .iter()
+        .map(|l| l.initial_quantity * l.effective_unit_cost)
+        .sum();
+    let total_sold_qty: i64 = lots
+        .iter()
+        .map(|l| l.initial_quantity - l.remaining_quantity)
+        .sum();
+    let total_sold_cost: i64 = lots
+        .iter()
+        .map(|l| (l.initial_quantity - l.remaining_quantity) * l.effective_unit_cost)
+        .sum();
 
     let current_stock = total_purchased_qty - total_sold_qty;
     let current_inventory_value = total_purchased_val - total_sold_cost;
